@@ -82,16 +82,6 @@ target_link_libraries(basic PUBLIC
 # Add your project files
 add_executable(dynamic_hull dynamic_hull.cpp)
 
-add_executable(manifold manifold.cpp)
-target_link_libraries(manifold PUBLIC
-  igl::core
-  igl_copyleft::cgal
-  progressive_convex_hull_simplification
-)
-
-# No -Wformat
-target_compile_options(manifold PRIVATE -Wno-format)
-
 # Link igl (and the glfw module) to your project
 target_link_libraries(dynamic_hull PUBLIC 
   igl::glfw
@@ -100,3 +90,43 @@ target_link_libraries(dynamic_hull PUBLIC
   SDLP
   progressive_convex_hull_simplification
   )
+
+add_executable(manifold manifold.cpp)
+target_link_libraries(manifold PUBLIC
+  igl::core
+  igl_copyleft::cgal
+  progressive_convex_hull_simplification
+)
+
+target_compile_options(manifold PRIVATE
+  -Wno-format
+  $<$<CONFIG:RelWithDebInfo>:-g>
+  $<$<CONFIG:RelWithDebInfo>:-fno-omit-frame-pointer>
+  $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
+)
+
+find_program(DSYMUTIL_PROGRAM dsymutil)
+
+if(APPLE)
+  # For Xcode: ask Xcode itself to emit dSYMs.
+  set_target_properties(manifold PROPERTIES
+    XCODE_ATTRIBUTE_GCC_GENERATE_DEBUGGING_SYMBOLS[variant=Debug] YES
+    XCODE_ATTRIBUTE_GCC_GENERATE_DEBUGGING_SYMBOLS[variant=RelWithDebInfo] YES
+    XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT[variant=Debug] "dwarf-with-dsym"
+    XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT[variant=RelWithDebInfo] "dwarf-with-dsym"
+  )
+
+  # For non-Xcode generators: generate the dSYM explicitly.
+  # Still annoying. Seems I need to rm manifold.dSYM everytime
+  if(DSYMUTIL_PROGRAM AND NOT CMAKE_GENERATOR MATCHES "Xcode")
+    add_custom_command(TARGET manifold POST_BUILD
+      COMMAND ${DSYMUTIL_PROGRAM}
+              "$<TARGET_FILE:manifold>"
+              -o
+              "$<TARGET_FILE:manifold>.dSYM"
+      BYPRODUCTS "manifold.dSYM"
+      VERBATIM
+      COMMENT "Generating dSYM bundle for manifold"
+    )
+  endif()
+endif()

@@ -4,6 +4,7 @@
 #include <igl/min_heap.h>
 #include <igl/icosahedron.h>
 #include <igl/matlab_format.h>
+#include <igl/writeDMAT.h>
 #include <igl/remove_duplicate_vertices.h>
 #include <igl/get_seconds.h>
 #include <igl/copyleft/cgal/assign.h>
@@ -199,6 +200,7 @@ Polyhedron extract_copy_of_one_ring(
   const Polyhedron& poly,
   typename Polyhedron::Vertex_const_handle v)
 {
+
   using Point = typename Polyhedron::Point_3;
   Polyhedron out;
 
@@ -263,24 +265,9 @@ Polyhedron extract_copy_of_one_ring(
     }
   }
 
-  // Assign local halfedge/facet ids if desired
-  {
-    std::size_t hid = 0;
-    for(auto h = out.halfedges_begin(); h != out.halfedges_end(); ++h)
-    {
-      h->id() = hid++;
-    }
-  }
-  {
-    std::size_t fid = 0;
-    for(auto f = out.facets_begin(); f != out.facets_end(); ++f)
-    {
-      f->id() = fid++;
-    }
-  }
-
   return out;
 }
+
 template <class Polyhedron>
 typename Polyhedron::Traits::Oriented_side 
 edge_side(
@@ -368,6 +355,12 @@ void confirm_all_edges_are_convex(const Polyhedron& poly)
   }
 }
 
+#warning This might even be O(N³). I think the worst case number of flips is \
+O(N²), but this implementation restarts the search for a non-convex edge \
+after every flip, which could lead to O(N³) behavior. Does the inner for \
+loop really need the `break` after the flip, or could it continue to \
+halfedges_end() even if it misses some newly non-convex edges knowing \
+that it will get them on the next pass?
 
 template <class Polyhedron>
 int flip_until_all_interior_edges_are_convex(
@@ -397,7 +390,12 @@ int flip_until_all_interior_edges_are_convex(
            throw std::runtime_error("Too many flips, something is wrong.");
          }
          // Sad O(|E|^2) algorithm. Hoping |E| is small!
-         break;
+         // I claim it's ok to not break. After CGAL::Euler::flip_edge, e is
+         // still valid and somewhere in the list of half-edges, so this just
+         // continues until halfedges_end() and then starts over at
+         // halfedges_begin(), which should be fine. We still potentially
+         // recheck everything a full additional time.
+         //break;
        }
      }
   }
@@ -542,6 +540,25 @@ struct Record
   std::vector<int> path;
 };
 
+#warning measure_vertex_erasure is currently the bottleneck, and within that \
+extract_copy_of_one_ring. Currently the steps are: \
+  1.1. extract_copy_of_one_ring \
+  1.2. erase_center_vertex \
+  1.3. triangulate with fan \
+  1.4. flip edges until convex \
+  2.1. Use these triangles to measure primal volume \
+The copy (1.1) seems unnecessarily slow, especially if we are immediately \
+throwing away the copied topology and the copied v->point (1.2-1.3). We could \
+at least: \
+  1.1 build N-gon directly (like make_triangle) \
+  1.2. triangulate with fan \
+  1.3. flip edges until convex \
+Alternatively, (and maybe always for large input) we could \
+  1.1 build convex hull of one-ring points \
+  1.2 remove all triangles with negative orientation (CGAL::orientation) with respect to v->point \
+This was previously problematic to do robustly (sometimes the boundaries wouldn't match up)
+
+
 template <class Polyhedron>
 std::pair<
   typename Polyhedron::Traits::FT,
@@ -626,12 +643,12 @@ measure_vertex_erasure(
       CGAL::Euler::split_face(h, h->next()->next(), one_ring_copy);
     }
   }
-  //IGL_TICTOC_LAMBDA;
-  //tictoc();
+  IGL_TICTOC_LAMBDA;
+  tictoc();
   const int num_flips = flip_until_all_interior_edges_are_convex(one_ring_copy,1000);
-  //num_flips_list.push_back(num_flips);
-  //local_size_list.push_back(one_ring_copy.size_of_vertices());
-  //flip_times_list.push_back(tictoc());
+  num_flips_list.push_back(num_flips);
+  local_size_list.push_back(one_ring_copy.size_of_vertices());
+  flip_times_list.push_back(tictoc());
   assert(num_flips < 1000);
   //printf("confirm_all_edges_are_convex(one_ring_copy) after %d flips\n", num_flips);
 #ifndef NDEBUG
@@ -639,6 +656,7 @@ measure_vertex_erasure(
 #endif
   
   // Check that p0 is on the non-negative side of all faces
+#ifndef NDEBUG
   for(auto f = one_ring_copy.facets_begin(); f != one_ring_copy.facets_end(); ++f)
   {
     auto h = f->halfedge();
@@ -652,6 +670,7 @@ measure_vertex_erasure(
       throw std::runtime_error("Removed point lies on negative side of a new face, something is wrong.");
     }
   }
+#endif
 
   auto [primal_volume, dual_volume, contains_origin] = primal_volume_subtended(one_ring_copy,p0);
   //printf("primal_volume = %g, dual_volume = %g, contains_origin = %d\n",
@@ -848,11 +867,12 @@ int main(int argc, char *argv[])
   }
   printf("dual convex hull: %g secs\n",tictoc());
 
-  // wait for user to push enter, to give time to attach profiler if desired
-  {
-    std::cout<<"Press Enter to continue..."<<std::endl;
-    std::cin.get();
-  }
+  //// wait for user to push enter, to give time to attach profiler if desired
+  //primal_points.clear();
+  //{
+  //  std::cout<<"Press Enter to continue..."<<std::endl;
+  //  std::cin.get();
+  //}
 
   tictoc();
   // Set ids of all vertices
@@ -980,6 +1000,9 @@ int main(int argc, char *argv[])
   //std::cout<<igl::matlab_format(Eigen::VectorXi::Map(num_flips_list.data(), num_flips_list.size()).transpose().eval(),"num_flips_list")<<std::endl;
   //std::cout<<igl::matlab_format(Eigen::VectorXi::Map(local_size_list.data(), local_size_list.size()).transpose().eval(),"local_size_list")<<std::endl;
   //std::cout<<igl::matlab_format(Eigen::VectorXd::Map(flip_times_list.data(), flip_times_list.size()).transpose().eval(),"flip_times_list")<<std::endl;
+  igl::writeDMAT("num_flips_list.dmat", Eigen::VectorXi::Map(num_flips_list.data(), num_flips_list.size()));
+  igl::writeDMAT("local_size_list.dmat", Eigen::VectorXi::Map(local_size_list.data(), local_size_list.size()));
+  igl::writeDMAT("flip_times_list.dmat", Eigen::VectorXd::Map(flip_times_list.data(), flip_times_list.size()));
 
 
 
