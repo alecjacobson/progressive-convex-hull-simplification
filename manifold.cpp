@@ -1,4 +1,3 @@
-#include <cstdio>
 #include "chebyshev_center.h"
 #include "primal_volume_subtended.hpp"
 #include <igl/read_triangle_mesh.h>
@@ -6,6 +5,7 @@
 #include <igl/icosahedron.h>
 #include <igl/matlab_format.h>
 #include <igl/remove_duplicate_vertices.h>
+#include <igl/get_seconds.h>
 #include <igl/copyleft/cgal/assign.h>
 #include <igl/copyleft/cgal/polyhedron_to_mesh.h>
 #include <igl/copyleft/cgal/join_coplanar_neighboring_facets.h>
@@ -16,9 +16,15 @@
 #include <CGAL/Polyhedron_items_with_id_3.h>
 #include <CGAL/convex_hull_3.h>
 #include <CGAL/Polyhedron_copy_3.h>
+#include <CGAL/Kernel_traits.h>
 #include <CGAL/Cartesian_converter.h>
 #include <Eigen/Core>
 #include <iostream>
+#include <cstdio>
+
+std::vector<int> num_flips_list;
+std::vector<int> local_size_list;
+std::vector<double> flip_times_list;
 
 template <typename Kernel, typename DerivedV>
 std::vector<typename Kernel::Point_3> point_list(
@@ -362,6 +368,7 @@ void confirm_all_edges_are_convex(const Polyhedron& poly)
   }
 }
 
+
 template <class Polyhedron>
 int flip_until_all_interior_edges_are_convex(
   Polyhedron& poly,
@@ -487,18 +494,18 @@ void erase_vertex_and_clip_ears(
     return h->next();
   };
 
-  {
-    int count = 0;
-    auto h = h0;
-    while(true)
-    {
-      h = walk(h);
-      count++;
-      assert(count < 1000);
-      if(h == h0){break;}
-    }
-    printf("count = %d\n",count);
-  }
+  //{
+  //  int count = 0;
+  //  auto h = h0;
+  //  while(true)
+  //  {
+  //    h = walk(h);
+  //    count++;
+  //    assert(count < 1000);
+  //    if(h == h0){break;}
+  //  }
+  //  printf("count = %d\n",count);
+  //}
 
   {
     auto h = h0;
@@ -511,21 +518,21 @@ void erase_vertex_and_clip_ears(
       }
       // glue the ear back on
       h = dual.split_facet(h->prev(),h->next());
-      {
-        auto g = h->opposite();
-        printf("glue (%d %d %d)\n",
-            g->vertex()->id(),
-            g->next()->vertex()->id(),
-            g->next()->next()->vertex()->id());
-      }
+      //{
+      //  auto g = h->opposite();
+      //  printf("glue (%d %d %d)\n",
+      //      g->vertex()->id(),
+      //      g->next()->vertex()->id(),
+      //      g->next()->next()->vertex()->id());
+      //}
     }
-    {
-      auto g = h;
-      printf("left (%d %d %d)\n",
-          g->vertex()->id(),
-          g->next()->vertex()->id(),
-          g->next()->next()->vertex()->id());
-    }
+    //{
+    //  auto g = h;
+    //  printf("left (%d %d %d)\n",
+    //      g->vertex()->id(),
+    //      g->next()->vertex()->id(),
+    //      g->next()->next()->vertex()->id());
+    //}
   }
 }
 
@@ -543,7 +550,7 @@ measure_vertex_erasure(
   const Polyhedron & dual,
   const typename Polyhedron::Vertex_handle & v)
 {
-  printf("measure_vertex_erasure(%d)\n", v->id());
+  //printf("measure_vertex_erasure(%d)\n", v->id());
   using Scalar = typename Polyhedron::Traits::FT;
   {
     for(auto u = dual.vertices_begin(); u != dual.vertices_end(); ++u)
@@ -556,40 +563,42 @@ measure_vertex_erasure(
     }
   }
 
-  // print ids of neighbors
-  {
-    auto h = v->halfedge();
-    printf("  v id = %d\n", v->id());
-    printf("    neighbors: ");
-    do
-    {
-      printf("%d ", h->opposite()->vertex()->id());
-      h = h->next()->opposite();
-    } while(h != v->halfedge());
-    printf("\n");
-  }
+  //// print ids of neighbors
+  //{
+  //  auto h = v->halfedge();
+  //  printf("  v id = %d\n", v->id());
+  //  printf("    neighbors: ");
+  //  do
+  //  {
+  //    printf("%d ", h->opposite()->vertex()->id());
+  //    h = h->next()->opposite();
+  //  } while(h != v->halfedge());
+  //  printf("\n");
+  //}
 
   // Always in [v, one-ring in order]
   auto one_ring_copy = extract_copy_of_one_ring(dual, v);
-  // see that ids got copied by printing them
-  {
-    auto v0 = one_ring_copy.vertices_begin();
-    printf("  v0 id = %d\n", v0->id());
-    printf("    neighbors: ");
-    auto h = v0->halfedge();
-    do
-    {
-      printf("%d ", h->opposite()->vertex()->id());
-      h = h->next()->opposite();
-    } while(h != v0->halfedge());
-    printf("\n");
-  }
+  //// see that ids got copied by printing them
+  //{
+  //  auto v0 = one_ring_copy.vertices_begin();
+  //  printf("  v0 id = %d\n", v0->id());
+  //  printf("    neighbors: ");
+  //  auto h = v0->halfedge();
+  //  do
+  //  {
+  //    printf("%d ", h->opposite()->vertex()->id());
+  //    h = h->next()->opposite();
+  //  } while(h != v0->halfedge());
+  //  printf("\n");
+  //}
 
   //print_in_matlab_format(dual,"d");
   //print_in_matlab_format(one_ring_copy,"o");
 
   //printf("confirm_all_edges_are_convex(one_ring_copy)\n");
+#ifndef NDEBUG
   confirm_all_edges_are_convex(one_ring_copy);
+#endif
 
   auto v0 = one_ring_copy.vertices_begin();
   // Copy point 
@@ -598,17 +607,17 @@ measure_vertex_erasure(
   // half edge pointing at v0
   auto g = v0->halfedge();
   auto h0 = one_ring_copy.erase_center_vertex(g);
-  {
-    printf("  after erasing center vertex, one_ring_copy's facet has vertices: ");
-    auto h = h0;
-    while(true)
-    {
-      printf("%d ",h->vertex()->id());
-      h = h->next();
-      if(h == h0) { break; }
-    }
-    printf("\n");
-  }
+  //{
+  //  printf("  after erasing center vertex, one_ring_copy's facet has vertices: ");
+  //  auto h = h0;
+  //  while(true)
+  //  {
+  //    printf("%d ",h->vertex()->id());
+  //    h = h->next();
+  //    if(h == h0) { break; }
+  //  }
+  //  printf("\n");
+  //}
   {
     auto h = h0;
     // triangulate fan
@@ -617,10 +626,17 @@ measure_vertex_erasure(
       CGAL::Euler::split_face(h, h->next()->next(), one_ring_copy);
     }
   }
+  //IGL_TICTOC_LAMBDA;
+  //tictoc();
   const int num_flips = flip_until_all_interior_edges_are_convex(one_ring_copy,1000);
+  //num_flips_list.push_back(num_flips);
+  //local_size_list.push_back(one_ring_copy.size_of_vertices());
+  //flip_times_list.push_back(tictoc());
   assert(num_flips < 1000);
   //printf("confirm_all_edges_are_convex(one_ring_copy) after %d flips\n", num_flips);
+#ifndef NDEBUG
   confirm_all_edges_are_convex(one_ring_copy);
+#endif
   
   // Check that p0 is on the non-negative side of all faces
   for(auto f = one_ring_copy.facets_begin(); f != one_ring_copy.facets_end(); ++f)
@@ -638,29 +654,29 @@ measure_vertex_erasure(
   }
 
   auto [primal_volume, dual_volume, contains_origin] = primal_volume_subtended(one_ring_copy,p0);
-  printf("primal_volume = %g, dual_volume = %g, contains_origin = %d\n",
-    CGAL::to_double(primal_volume),
-    CGAL::to_double(dual_volume),
-    contains_origin);
+  //printf("primal_volume = %g, dual_volume = %g, contains_origin = %d\n",
+  //  CGAL::to_double(primal_volume),
+  //  CGAL::to_double(dual_volume),
+  //  contains_origin);
   const Scalar cost = primal_volume;
 
   // Print all the triangles
-  print_faces(one_ring_copy);
+  //print_faces(one_ring_copy);
 
   Record record;
   auto & path = record.path;
   auto & start_vertex_id = record.start_vertex_id;
   std::tie(start_vertex_id, path) = clip_ears(one_ring_copy,h0);
-  {
-    // print path
-    printf("start_vertex_id = %d\n",start_vertex_id);
-    std::cout<<"path = [";
-    for(const auto & p : path)
-    {
-      printf("%d ",p);
-    }
-    std::cout<<"];"<<std::endl;
-  }
+  //{
+  //  // print path
+  //  printf("start_vertex_id = %d\n",start_vertex_id);
+  //  std::cout<<"path = [";
+  //  for(const auto & p : path)
+  //  {
+  //    printf("%d ",p);
+  //  }
+  //  std::cout<<"];"<<std::endl;
+  //}
 
   return {cost, record};
 }
@@ -679,9 +695,71 @@ collect_neighbors(const Vertex_handle & v)
   return neighbors;
 }
 
+template <class Polyhedron, typename x0_type>
+std::tuple<
+    Eigen::Matrix<typename Polyhedron::Traits::FT, Eigen::Dynamic, 3, Eigen::RowMajor>,
+    Eigen::VectorXi,
+    Eigen::VectorXi>
+dual_to_primal_mesh(
+  const Polyhedron & dual,
+  const x0_type & x0_exact)
+{
+  using Scalar = typename Polyhedron::Traits::FT;
+  Eigen::Matrix<Scalar, Eigen::Dynamic, 3, Eigen::RowMajor> pV(dual.size_of_facets(), 3);
+  {
+    // Assign id to every face
+    for(auto f = dual.facets_begin(); f != dual.facets_end(); ++f)
+    {
+      // get face normal and barycenter
+      auto h = f->halfedge();
+      const auto & A = h->vertex()->point();
+      const auto & B = h->next()->vertex()->point();
+      const auto & C = h->next()->next()->vertex()->point();
+      const auto n = CGAL::cross_product(B - A, C - A);
+      const auto bc = ((A - CGAL::ORIGIN) + (B - CGAL::ORIGIN) + (C - CGAL::ORIGIN)) / Scalar(3);
+      const Scalar beta = n * bc;
+      // convert x0_exact to same kernel as dual if needed
+      using EK = typename CGAL::Kernel_traits<x0_type>::Kernel;
+      typename Polyhedron::Traits::Point_3 x0;
+      {
+        CGAL::Cartesian_converter<EK, typename Polyhedron::Traits> to_dual_kernel;
+        x0 = to_dual_kernel(x0_exact);
+      }
+      // p = x0 + n/beta
+      const auto p = CGAL::ORIGIN + (x0 - CGAL::ORIGIN) + (n / beta);
+      pV.row(f->id()) << p.x(), p.y(), p.z();
+    }
+  }
+  std::vector<int> pPI;
+  std::vector<int> pPC = {0};
+  {
+    // loop over every vertex
+    for(auto v = dual.vertices_begin(); v != dual.vertices_end(); ++v)
+    {
+      auto h = v->halfedge();
+      int np = 0;
+      // loop over every face adjacent to vertex
+      do
+      {
+        auto f = h->facet();
+        pPI.push_back(f->id());
+        h = h->next()->opposite();
+        np++;
+      } while(h != v->halfedge());
+      pPC.push_back(pPC.back() + np);
+    }
+  }
+  return {
+    pV,
+    Eigen::VectorXi(Eigen::VectorXi::Map(pPI.data(), pPI.size())),
+    Eigen::VectorXi(Eigen::VectorXi::Map(pPC.data(), pPC.size()))};
+}
+
 
 int main(int argc, char *argv[])
 {
+
+  IGL_TICTOC_LAMBDA;
   // Initial input mesh
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;
@@ -704,11 +782,14 @@ int main(int argc, char *argv[])
   using IPolyhedron = CGAL::Polyhedron_3<IK, CGAL::Polyhedron_items_with_id_3>;
   using IPoint = typename IPolyhedron::Traits::Point_3;
 
+  tictoc();
   auto primal_points = point_list<EK>(V);
   EPolyhedron primal;
   CGAL::convex_hull_3(primal_points.begin(),primal_points.end(),primal);
   printf("primal: %d vertices, %d facets\n",primal.size_of_vertices(),primal.size_of_facets());
+  printf("initial primal convex hull: %g secs\n",tictoc());
 
+  tictoc();
   double primal_squared_area_tol = 1e-15;
   double dual_min_edge_tol = 1e-7;
   // use chebyshev_center.h but only consider halfspaces of faces with squard areas
@@ -740,7 +821,7 @@ int main(int argc, char *argv[])
   printf("|dV| = %d out of %d\n", dV.rows(), dV_exact.rows());
 
   IPolyhedron dual;
-  bool use_exact_kernel_for_dual_convex_hull = true;
+  bool use_exact_kernel_for_dual_convex_hull = false;
   if(use_exact_kernel_for_dual_convex_hull)
   {
     // This doesn't seem to help.
@@ -765,7 +846,15 @@ int main(int argc, char *argv[])
     auto dual_points = point_list<IK>(dV);
     CGAL::convex_hull_3(dual_points.begin(),dual_points.end(),dual);
   }
+  printf("dual convex hull: %g secs\n",tictoc());
 
+  // wait for user to push enter, to give time to attach profiler if desired
+  {
+    std::cout<<"Press Enter to continue..."<<std::endl;
+    std::cin.get();
+  }
+
+  tictoc();
   // Set ids of all vertices
   {
     int vid = 0;
@@ -778,32 +867,10 @@ int main(int argc, char *argv[])
   //igl::copyleft::cgal::join_coplanar_neighboring_facets(dual);
 
   //printf("confirm_all_edges_are_convex(dual)\n");
+#ifndef NDEBUG
   confirm_all_edges_are_convex(dual);
+#endif
   printf("dual: %d vertices, %d facets\n",dual.size_of_vertices(),dual.size_of_facets());
-
-  // first vertex
-
-  auto v = dual.vertices_begin();
-  printf("v->id() = %d\n", v->id());
-  {
-    int max_valence = 0;
-    auto u = v;
-    for(; u != dual.vertices_end(); ++u)
-    {
-      int valence = 0;
-      auto h = u->halfedge();
-      if(h != nullptr)
-      {
-        do
-        {
-          valence++;
-          h = h->next()->opposite();
-        } while(h != u->halfedge());
-      }
-      if(valence > max_valence) { max_valence = valence; v = u;}
-    }
-    printf("v->id() with max valence (%d) = %d\n", max_valence, v->id());
-  }
 
   using Scalar = decltype(dual)::Traits::FT;
   const int num_vertices = dual.size_of_vertices();
@@ -817,6 +884,11 @@ int main(int argc, char *argv[])
     Record record;
   };
 
+  num_flips_list.clear();
+  num_flips_list.reserve(num_vertices);
+  local_size_list.clear();
+  local_size_list.reserve(num_vertices);
+
   std::vector<FullRecord> full_records(num_vertices);
   igl::min_heap<std::tuple<Scalar,int,int>> Q;
   for(auto v = dual.vertices_begin(); v != dual.vertices_end(); ++v)
@@ -829,6 +901,10 @@ int main(int argc, char *argv[])
 
   assert(dual.is_pure_triangle());
   assert(dual.is_closed());
+  int num_vertices_removed = 0;
+  const int initial_num_vertices = dual.size_of_vertices();
+  const int target_num_vertices = 18;
+  const int max_vertices_removed = initial_num_vertices - target_num_vertices;
   while(true)
   {
     int id;
@@ -839,31 +915,32 @@ int main(int argc, char *argv[])
       std::tie(cost, id, visit) = Q.top();
       Q.pop();
       if(visit == full_records[id].visit) { break; }
-      printf("skipping stale entry on %d\n", id);
+      //printf("skipping stale entry on %d\n", id);
     }
     if(cost == std::numeric_limits<Scalar>::infinity())
     {
       printf("Remaining entries in Q are ∞ cost\n");
       break;
     }
-    printf("removing from Q vertex %d with cost %g and visit %d\n", id, cost,visit);
+    //printf("removing from Q vertex %d with cost %g and visit %d\n", id, cost,visit);
     assert(cost == full_records[id].cost);
     auto v = full_records[id].vertex;
     auto record = full_records[id].record;
     const auto neighbors = collect_neighbors(v);
 
-    {
-      printf("  neighbors:");
-      for(const auto & n : neighbors)
-      {
-        printf(" %d", n->id());
-      }
-      printf("\n");
-    }
+    //{
+    //  printf("  neighbors:");
+    //  for(const auto & n : neighbors)
+    //  {
+    //    printf(" %d", n->id());
+    //  }
+    //  printf("\n");
+    //}
 
-    print_VF(dual,"b");
+    //print_VF(dual,"b");
     erase_vertex_and_clip_ears(dual, v, record.start_vertex_id, record.path);
-    print_VF(dual,"a");
+    num_vertices_removed++;
+    //print_VF(dual,"a");
     assert(dual.is_pure_triangle());
     assert(dual.is_closed());
 
@@ -872,10 +949,38 @@ int main(int argc, char *argv[])
       const int nid = n->id();
       std::tie(full_records[nid].cost, full_records[nid].record) = measure_vertex_erasure(dual, n);
       full_records[nid].visit++;
-      printf("  updating neighbor %d with new cost %g and visit %d\n", nid, full_records[nid].cost, full_records[nid].visit);
+      //printf("  updating neighbor %d with new cost %g and visit %d\n", nid, full_records[nid].cost, full_records[nid].visit);
       Q.push({full_records[nid].cost, nid, full_records[nid].visit});
     }
+
+    if(num_vertices_removed >= max_vertices_removed)
+    {
+      printf("Removed %d vertices, stopping.\n", num_vertices_removed);
+      break;
+    }
   }
+  printf("simplification: %g secs\n",tictoc());
+
+  tictoc();
+  // Assign id to every face
+  {
+    int fid = 0;
+    for(auto f = dual.facets_begin(); f != dual.facets_end(); ++f)
+    {
+      f->id() = fid++;
+    }
+  }
+  auto [pV,pPI,pPC] = dual_to_primal_mesh(dual,x0_exact);
+  printf("dual_to_primal_mesh: %g secs\n",tictoc());
+  printf("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n");
+  std::cout<<igl::matlab_format(pV,"pV")<<std::endl;
+  std::cout<<igl::matlab_format_index(pPI.transpose().eval(),"pPI")<<std::endl;
+  std::cout<<igl::matlab_format(      pPC.transpose().eval(),"pPC")<<std::endl;
+  //printf("---------------------------------------------------\n");
+  //std::cout<<igl::matlab_format(Eigen::VectorXi::Map(num_flips_list.data(), num_flips_list.size()).transpose().eval(),"num_flips_list")<<std::endl;
+  //std::cout<<igl::matlab_format(Eigen::VectorXi::Map(local_size_list.data(), local_size_list.size()).transpose().eval(),"local_size_list")<<std::endl;
+  //std::cout<<igl::matlab_format(Eigen::VectorXd::Map(flip_times_list.data(), flip_times_list.size()).transpose().eval(),"flip_times_list")<<std::endl;
+
+
 
 }
-
