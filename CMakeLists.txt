@@ -3,6 +3,8 @@ project(progressive-convex-hull-simplification)
 
 list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
+option(PCHS_INTERACTIVE "Build the interactive polyscope viewer (requires polyscope + embree)" ON)
+
 # Libigl
 include(FetchContent)
 FetchContent_Declare(
@@ -25,17 +27,20 @@ target_include_directories(SDLP INTERFACE ${sdlp_SOURCE_DIR}/include)
 
 
 # Enable CGAL copyleft
-#igl_include(imgui)
 igl_include(copyleft cgal)
 
-# Polyscope
-include(FetchContent)
-FetchContent_Declare(
-    polyscope
-    GIT_REPOSITORY https://github.com/nmwsharp/polyscope.git
-    GIT_TAG        v2.3.0
-)
-FetchContent_MakeAvailable(polyscope)
+if(PCHS_INTERACTIVE)
+  igl_include(embree)
+
+  # Polyscope
+  include(FetchContent)
+  FetchContent_Declare(
+      polyscope
+      GIT_REPOSITORY https://github.com/nmwsharp/polyscope.git
+      GIT_TAG        v2.3.0
+  )
+  FetchContent_MakeAvailable(polyscope)
+endif()
 
 #
 add_library(progressive_convex_hull_simplification STATIC
@@ -43,10 +48,10 @@ add_library(progressive_convex_hull_simplification STATIC
   primal_volume_subtended.cpp
   convex_hull_simplification.cpp
 )
-target_include_directories(progressive_convex_hull_simplification PUBLIC 
+target_include_directories(progressive_convex_hull_simplification PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(progressive_convex_hull_simplification PUBLIC 
+target_link_libraries(progressive_convex_hull_simplification PUBLIC
   igl::core
   igl_copyleft::cgal
   SDLP
@@ -55,10 +60,17 @@ target_link_libraries(progressive_convex_hull_simplification PUBLIC
 add_executable(pchs main.cpp)
 target_link_libraries(pchs PUBLIC
   igl::core
-  polyscope
   igl_copyleft::cgal
   progressive_convex_hull_simplification
 )
+
+if(PCHS_INTERACTIVE)
+  target_compile_definitions(pchs PRIVATE PCHS_INTERACTIVE)
+  target_link_libraries(pchs PUBLIC
+    polyscope
+    igl::embree
+  )
+endif()
 
 target_compile_options(pchs PRIVATE
   -Wno-format

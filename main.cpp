@@ -1,17 +1,22 @@
 #include "convex_hull_simplification.h"
 
 #include <igl/read_triangle_mesh.h>
-#include <igl/polygons_to_triangles.h>
 #include <igl/icosahedron.h>
 #include <igl/matlab_format.h>
 #include <igl/get_seconds.h>
 #include <igl/copyleft/cgal/polyhedron_to_mesh.h>
 #include <igl/copyleft/cgal/assign.h>
 
+#ifdef PCHS_INTERACTIVE
+#include <igl/polygons_to_triangles.h>
+#include <igl/per_vertex_normals.h>
+#include <igl/embree/ambient_occlusion.h>
+
 #include <polyscope/polyscope.h>
 #include <polyscope/surface_mesh.h>
 #include <polyscope/curve_network.h>
 #include <imgui.h>
+#endif // PCHS_INTERACTIVE
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Polyhedron_3.h>
@@ -25,6 +30,11 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#ifdef PCHS_INTERACTIVE
+#include <atomic>
+#include <mutex>
+#include <thread>
+#endif // PCHS_INTERACTIVE
 
 // --- Debug helpers (all call sites are commented out) ---
 
@@ -106,7 +116,15 @@ int main(int argc, char *argv[])
   {
     const std::string arg(argv[i]);
     if(arg == "--stats")       { print_stats = true; }
-    else if(arg == "--interactive") { interactive = true; }
+    else if(arg == "--interactive")
+    {
+#ifdef PCHS_INTERACTIVE
+      interactive = true;
+#else
+      fprintf(stderr, "error: --interactive requires a build with PCHS_INTERACTIVE=ON\n");
+      return 1;
+#endif
+    }
     else if(arg == "--target" && i+1 < argc) { target = std::stoi(argv[++i]); }
     else                       { mesh_file = argv[i]; }
   }
@@ -120,6 +138,7 @@ int main(int argc, char *argv[])
 
   printf("|V| = %d, |F| = %d\n", V.rows(), F.rows());
 
+#ifdef PCHS_INTERACTIVE
   // --- Interactive mode (polyscope) ---
   if(interactive)
   {
@@ -138,6 +157,23 @@ int main(int argc, char *argv[])
       m->setSurfaceColor(glm::vec3(0.7f, 0.75f, 0.8f));
       m->setEnabled(true);
     }
+
+    // AO: computed in a worker thread; results picked up in userCallback.
+    std::atomic<bool> ao_ready{false};
+    Eigen::VectorXd   ao_values;
+    std::mutex        ao_mutex;
+    std::thread ao_thread([&]()
+    {
+      Eigen::MatrixXd N;
+      igl::per_vertex_normals(V, F, N);
+      Eigen::VectorXd S;
+      igl::embree::ambient_occlusion(V, F, V, N, 512, S);
+      {
+        std::lock_guard<std::mutex> lk(ao_mutex);
+        ao_values = (1.0 - S.array()).matrix();  // 1 = unoccluded (bright)
+      }
+      ao_ready.store(true, std::memory_order_release);
+    });
 
     float hull_alpha = 0.85f;  // opacity: 1=opaque, 0=transparent
     int   color_mode = 1;      // 0 = graph coloring, 1 = normal pseudocolor
@@ -222,6 +258,7 @@ int main(int argc, char *argv[])
       cn->setRadius(0.001, true);
       cn->setColor(glm::vec3(0.15f, 0.15f, 0.15f));
 
+      printf("dual vertices: %d\n", chs->num_dual_vertices());
     };
     update_hull();
 
@@ -237,6 +274,26 @@ int main(int argc, char *argv[])
         first_frame = false;
         ImGui::GetStateStorage()->SetInt(ImGui::GetID("Polyscope"),  0);
         ImGui::GetStateStorage()->SetInt(ImGui::GetID("Structures"), 0);
+      }
+
+      // Pick up AO result as soon as the worker thread finishes.
+      if(ao_ready.load(std::memory_order_acquire))
+      {
+        ao_ready.store(false, std::memory_order_relaxed);
+        Eigen::VectorXd S;
+        {
+          std::lock_guard<std::mutex> lk(ao_mutex);
+          S = ao_values;
+        }
+        if(auto* m = polyscope::getSurfaceMesh("input mesh"))
+        {
+          const glm::vec3 base(0.7f, 0.75f, 0.8f);
+          Eigen::MatrixXd C(S.size(), 3);
+          for(int i = 0; i < S.size(); i++)
+            C.row(i) << base.r * S(i), base.g * S(i), base.b * S(i);
+          auto* q = m->addVertexColorQuantity("AO", C);
+          q->setEnabled(true);
+        }
       }
 
       // Animation runs unconditionally so it continues even when the panel
@@ -255,7 +312,7 @@ int main(int argc, char *argv[])
           animate = false;
       }
 
-      if(ImGui::CollapsingHeader("Progressive Convex Hull Simplification", ImGuiTreeNodeFlags_DefaultOpen))
+      if(ImGui::CollapsingHeader("Hull Simplification", ImGuiTreeNodeFlags_DefaultOpen))
       {
         ImGui::Text("Dual vertices: %d", chs->num_dual_vertices());
         ImGui::SetNextItemWidth(120.0f);
@@ -295,8 +352,10 @@ int main(int argc, char *argv[])
     };
 
     polyscope::show();
+    ao_thread.join();
     return 0;
   }
+#endif // PCHS_INTERACTIVE
 
   // --- Non-interactive mode ---
   ConvexHullSimplification chs(V, F, max_degree_for_flips);

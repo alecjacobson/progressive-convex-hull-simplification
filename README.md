@@ -1,20 +1,25 @@
 # Progressive Convex Hull Simplification
 
-Research implementation accompanying `convex-hull-simplification.tex`. The code is a working but unpolished prototype.
+![Progressive convex hull simplification of the Actaeon mesh](pchs-actaeon.gif)
 
 ## What it does
 
 Given a 3D mesh, produces a sequence of progressively simpler convex hulls that are guaranteed to strictly contain the input at every step (conservative / exterior simplification).
 
-The key idea is to work in the *dual* of the convex hull. Removing a vertex from the dual corresponds to removing a halfspace from the primal hull's H-representation — i.e., relaxing one face constraint and slightly enlarging the hull. Vertices are removed greedily in order of the primal volume added (analogous to quadric-error simplification for triangle meshes).
+The key idea is to work in the *dual* of the convex hull. Removing a vertex from the dual corresponds to removing a halfspace from the primal hull's H-representation — i.e., eliminating one face constraint and slightly enlarging the hull. Dual vertices are removed greedily in order of the primal volume added (analogous to quadric-error simplification for triangle meshes).
 
 ## Build
 
-Requires CMake ≥ 3.16 and a C++17 compiler. Dependencies (libigl, CGAL, SDLP, Eigen, GLFW) are fetched automatically.
+Requires CMake ≥ 3.16 and a C++17 compiler. Dependencies are fetched automatically via FetchContent.
 
 ```bash
+# Full build (includes interactive viewer; polyscope + embree fetched automatically)
 cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build --target pchs
+
+# Headless build (no polyscope or embree dependency)
+cmake -B build-headless -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPCHS_INTERACTIVE=OFF
+cmake --build build-headless --target pchs
 ```
 
 ## Usage
@@ -39,21 +44,15 @@ In non-interactive mode the simplified hull is printed to stdout as a polygon me
 ./build/pchs --interactive --target 18 Actaeon.ply
 ```
 
-The viewer shows the input mesh (gray) and the current simplified hull (orange, 75% transparent).
-
-| Key | Action |
-|---|---|
-| `space` | Remove one dual vertex (one greedy step) |
-| `a` | Simplify to `--target` in one go |
-| `r` | Reset to the full convex hull |
+Opens a [polyscope](https://polyscope.run) window showing the input mesh (with ambient occlusion, computed in the background) and the current simplified hull (transparent, colored by face normals or graph coloring). Controls are in the left panel under **Hull Simplification**: step one vertex at a time, animate to the target count, adjust hull transparency, switch coloring mode, or reset to the full hull.
 
 ## Algorithm sketch
 
-1. Compute the convex hull of the input mesh (primal, exact kernel via CGAL).
+1. Compute the convex hull of the input primal mesh (CGAL).
 2. Find the Chebyshev center of the primal halfspaces via a small linear program (SDLP).
 3. Map each non-(nearly-)degenerate primal face to a dual vertex via the polarity transform about the Chebyshev center.
-4. Compute the convex hull of the dual points (using exact predicates).
-5. For each dual vertex, measure the cost of removing it: the primal volume that would be added to the hull (`primal_volume_subtended`).
+4. Compute the convex hull of the dual points (CGAL).
+5. For each dual vertex, measure the cost of removing it and re-triangulating convexly locally: the primal volume that would be added to the hull (`primal_volume_subtended`).
 6. Maintain a lazy-deletion min-heap. Repeatedly pop the cheapest vertex, erase it from the dual (retriangulating the resulting hole convexly), and update neighbors' costs.
 7. Convert the simplified dual back to a primal polygon mesh.
 
