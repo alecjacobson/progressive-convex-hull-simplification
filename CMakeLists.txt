@@ -25,14 +25,15 @@ target_include_directories(SDLP INTERFACE ${sdlp_SOURCE_DIR}/include)
 
 
 # Enable the target igl::glfw
-#igl_include(glfw)
+igl_include(glfw)
 #igl_include(imgui)
 igl_include(copyleft cgal)
 
 #
-add_library(progressive_convex_hull_simplification STATIC 
+add_library(progressive_convex_hull_simplification STATIC
   chebyshev_center.cpp
   primal_volume_subtended.cpp
+  convex_hull_simplification.cpp
 )
 target_include_directories(progressive_convex_hull_simplification PUBLIC 
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -46,6 +47,7 @@ target_link_libraries(progressive_convex_hull_simplification PUBLIC
 add_executable(pchs main.cpp)
 target_link_libraries(pchs PUBLIC
   igl::core
+  igl::glfw
   igl_copyleft::cgal
   progressive_convex_hull_simplification
 )
