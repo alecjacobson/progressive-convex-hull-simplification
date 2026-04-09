@@ -41,21 +41,7 @@ igl_include(copyleft cgal)
 
 #
 add_library(progressive_convex_hull_simplification STATIC 
-  measure.cpp
-  dual_volume.cpp
-  convex_hull.cpp
-  boundary_matrix.cpp
-  cells.cpp
-  half_edge_matrix.cpp
-  half_edge_next.cpp
-  quad_edge.cpp
-  #manifold_surface_mesh_to_polygons.cpp
-  convex_polytope_from_halfspaces.cpp
-  face_halfspaces.cpp
   chebyshev_center.cpp
-  volume_from_halfspaces.cpp
-  vector_area_and_barycenters.cpp
-  robust_dual_hull.cpp
   primal_volume_subtended.cpp
 )
 target_include_directories(progressive_convex_hull_simplification PUBLIC 
@@ -67,29 +53,6 @@ target_link_libraries(progressive_convex_hull_simplification PUBLIC
   SDLP
   #GeometryCentral::geometry-central
 )
-
-# Add your project files
-add_executable(basic main.cpp)
-
-# Link igl (and the glfw module) to your project
-target_link_libraries(basic PUBLIC 
-  igl::glfw
-  igl_copyleft::cgal
-  SDLP
-  progressive_convex_hull_simplification
-  )
-
-# Add your project files
-add_executable(dynamic_hull dynamic_hull.cpp)
-
-# Link igl (and the glfw module) to your project
-target_link_libraries(dynamic_hull PUBLIC 
-  igl::glfw
-  igl_copyleft::cgal
-  igl::imgui
-  SDLP
-  progressive_convex_hull_simplification
-  )
 
 add_executable(manifold manifold.cpp)
 target_link_libraries(manifold PUBLIC
