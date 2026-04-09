@@ -1,5 +1,6 @@
 #include "chebyshev_center.h"
 #include "primal_volume_subtended.hpp"
+
 #include <igl/read_triangle_mesh.h>
 #include <igl/min_heap.h>
 #include <igl/icosahedron.h>
@@ -10,7 +11,6 @@
 #include <igl/copyleft/cgal/assign.h>
 #include <igl/copyleft/cgal/polyhedron_to_mesh.h>
 #include <igl/copyleft/cgal/join_coplanar_neighboring_facets.h>
-
 
 #include <CGAL/Exact_predicates_exact_constructions_kernel.h>
 #include <CGAL/Polyhedron_3.h>
@@ -610,24 +610,6 @@ struct Record
   size_t start_vertex_id;
   std::vector<int> path;
 };
-
-#warning measure_vertex_erasure is currently the bottleneck, and within that \
-extract_copy_of_one_ring. Currently the steps are: \
-  1.1. extract_copy_of_one_ring \
-  1.2. erase_center_vertex \
-  1.3. triangulate with fan \
-  1.4. flip edges until convex \
-  2.1. Use these triangles to measure primal volume \
-The copy (1.1) seems unnecessarily slow, especially if we are immediately \
-throwing away the copied topology and the copied v->point (1.2-1.3). We could \
-at least: \
-  1.1 build N-gon directly (like make_triangle) \
-  1.2. triangulate with fan \
-  1.3. flip edges until convex \
-Alternatively, (and maybe always for large input) we could \
-  1.1 build convex hull of one-ring points \
-  1.2 remove all triangles with negative orientation (CGAL::orientation) with respect to v->point \
-This was previously problematic to do robustly (sometimes the boundaries wouldn't match up)
 
 // Output by reference so that h0 is valid reference on one_ring_copy.
 // Using return value for {one_ring_copy,h0} didn't work.

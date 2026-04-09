@@ -23,20 +23,10 @@ FetchContent_Populate(SDLP)
 add_library(SDLP INTERFACE)
 target_include_directories(SDLP INTERFACE ${sdlp_SOURCE_DIR}/include)
 
-# Fetch Geometry Central
-FetchContent_Declare(
-  GeometryCentral
-  GIT_REPOSITORY https://github.com/nmwsharp/geometry-central
-  GIT_TAG        v1.0.0
-)
-FetchContent_MakeAvailable(GeometryCentral)
-add_library(GeometryCentral::geometry-central ALIAS geometry-central)
-
-
 
 # Enable the target igl::glfw
-igl_include(glfw)
-igl_include(imgui)
+#igl_include(glfw)
+#igl_include(imgui)
 igl_include(copyleft cgal)
 
 #
@@ -51,17 +41,16 @@ target_link_libraries(progressive_convex_hull_simplification PUBLIC
   igl::core
   igl_copyleft::cgal
   SDLP
-  #GeometryCentral::geometry-central
 )
 
-add_executable(manifold manifold.cpp)
-target_link_libraries(manifold PUBLIC
+add_executable(pchs main.cpp)
+target_link_libraries(pchs PUBLIC
   igl::core
   igl_copyleft::cgal
   progressive_convex_hull_simplification
 )
 
-target_compile_options(manifold PRIVATE
+target_compile_options(pchs PRIVATE
   -Wno-format
   $<$<CONFIG:RelWithDebInfo>:-g>
   $<$<CONFIG:RelWithDebInfo>:-fno-omit-frame-pointer>
@@ -72,7 +61,7 @@ find_program(DSYMUTIL_PROGRAM dsymutil)
 
 if(APPLE)
   # For Xcode: ask Xcode itself to emit dSYMs.
-  set_target_properties(manifold PROPERTIES
+  set_target_properties(pchs PROPERTIES
     XCODE_ATTRIBUTE_GCC_GENERATE_DEBUGGING_SYMBOLS[variant=Debug] YES
     XCODE_ATTRIBUTE_GCC_GENERATE_DEBUGGING_SYMBOLS[variant=RelWithDebInfo] YES
     XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT[variant=Debug] "dwarf-with-dsym"
@@ -80,16 +69,16 @@ if(APPLE)
   )
 
   # For non-Xcode generators: generate the dSYM explicitly.
-  # Still annoying. Seems I need to rm manifold.dSYM everytime
+  # Still annoying. Seems I need to rm pchs.dSYM everytime
   if(DSYMUTIL_PROGRAM AND NOT CMAKE_GENERATOR MATCHES "Xcode")
-    add_custom_command(TARGET manifold POST_BUILD
+    add_custom_command(TARGET pchs POST_BUILD
       COMMAND ${DSYMUTIL_PROGRAM}
-              "$<TARGET_FILE:manifold>"
+              "$<TARGET_FILE:pchs>"
               -o
-              "$<TARGET_FILE:manifold>.dSYM"
-      BYPRODUCTS "manifold.dSYM"
+              "$<TARGET_FILE:pchs>.dSYM"
+      BYPRODUCTS "pchs.dSYM"
       VERBATIM
-      COMMENT "Generating dSYM bundle for manifold"
+      COMMENT "Generating dSYM bundle for pchs"
     )
   endif()
 endif()
