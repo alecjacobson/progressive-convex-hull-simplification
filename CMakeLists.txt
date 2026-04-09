@@ -24,10 +24,18 @@ add_library(SDLP INTERFACE)
 target_include_directories(SDLP INTERFACE ${sdlp_SOURCE_DIR}/include)
 
 
-# Enable the target igl::glfw
-igl_include(glfw)
+# Enable CGAL copyleft
 #igl_include(imgui)
 igl_include(copyleft cgal)
+
+# Polyscope
+include(FetchContent)
+FetchContent_Declare(
+    polyscope
+    GIT_REPOSITORY https://github.com/nmwsharp/polyscope.git
+    GIT_TAG        v2.3.0
+)
+FetchContent_MakeAvailable(polyscope)
 
 #
 add_library(progressive_convex_hull_simplification STATIC
@@ -47,7 +55,7 @@ target_link_libraries(progressive_convex_hull_simplification PUBLIC
 add_executable(pchs main.cpp)
 target_link_libraries(pchs PUBLIC
   igl::core
-  igl::glfw
+  polyscope
   igl_copyleft::cgal
   progressive_convex_hull_simplification
 )

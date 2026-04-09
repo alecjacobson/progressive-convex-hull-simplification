@@ -4,9 +4,13 @@
 #include <igl/icosahedron.h>
 #include <igl/matlab_format.h>
 #include <igl/get_seconds.h>
-#include <igl/opengl/glfw/Viewer.h>
 #include <igl/copyleft/cgal/polyhedron_to_mesh.h>
 #include <igl/copyleft/cgal/assign.h>
+
+#include <polyscope/polyscope.h>
+#include <polyscope/surface_mesh.h>
+#include <polyscope/curve_network.h>
+#include <imgui.h>
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Polyhedron_3.h>
@@ -137,59 +141,141 @@ int main(int argc, char *argv[])
 
   printf("|V| = %d, |F| = %d\n", V.rows(), F.rows());
 
-  // --- Interactive mode ---
+  // --- Interactive mode (polyscope) ---
   if(interactive)
   {
-    using Viewer = igl::opengl::glfw::Viewer;
-
     auto chs = std::make_unique<ConvexHullSimplification>(V, F, max_degree_for_flips);
 
-    Viewer viewer;
+    polyscope::init();
+    polyscope::options::programName = "Progressive Convex Hull Simplification";
+    polyscope::view::upDir = polyscope::UpDir::ZUp;
+    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::ShadowOnly;
+    polyscope::options::giveFocusOnShow = true;
 
-    // Mesh 0: input mesh
-    viewer.data(0).set_mesh(V, F);
-    viewer.data(0).set_colors((Eigen::MatrixXd(1,3) << 0.7, 0.75, 0.8).finished());
+    // Input mesh: gray, no edges, smooth shading
+    {
+      auto* m = polyscope::registerSurfaceMesh("input mesh", V, F);
+      m->setEdgeWidth(0.0);
+      m->setSurfaceColor(glm::vec3(0.7f, 0.75f, 0.8f));
+    }
 
-    // Mesh 1: simplified hull
-    const int hull_id = static_cast<int>(viewer.append_mesh());
+    float hull_alpha = 0.65f;  // opacity: 1=opaque, 0=transparent
 
-    // Helper: push current hull state into the viewer
+    // Helper: rebuild the simplified-hull mesh and polygon-edge curve network
+    // in polyscope from the current chs state.
+    // Faces are pseudocolored by stable dual-vertex id so colors are consistent
+    // across simplification steps. Edges follow polygon boundaries (pPI/pPC),
+    // not the fan-triangulation diagonals.
     const auto update_hull = [&]()
     {
       auto [pV, pPI, pPC] = chs->get_primal_mesh();
       auto [hV, hF] = triangulate_polygon_mesh(pV, pPI, pPC);
-      viewer.data(hull_id).clear();
-      viewer.data(hull_id).set_mesh(hV, hF);
-      // RGBA: warm orange at 75% opacity
-      viewer.data(hull_id).set_colors(
-        (Eigen::MatrixXd(1,4) << 1.0, 0.6, 0.2, 0.75).finished());
+
+      // Greedy coloring → ColorBrewer Set1 (9 qualitative colors).
+      // Labels wrap with % 9; in practice a convex polyhedron needs ≤ 4.
+      static const double set1[9][3] = {
+        {0.894, 0.102, 0.110},  // red      #E41A1C
+        {0.216, 0.494, 0.722},  // blue     #377EB8
+        {0.302, 0.686, 0.290},  // green    #4DAF4A
+        {0.596, 0.306, 0.639},  // purple   #984EA3
+        {1.000, 0.498, 0.000},  // orange   #FF7F00
+        {1.000, 1.000, 0.200},  // yellow   #FFFF33
+        {0.651, 0.337, 0.157},  // brown    #A65628
+        {0.969, 0.506, 0.749},  // pink     #F781BF
+        {0.600, 0.600, 0.600},  // gray     #999999
+      };
+      const auto vids     = chs->dual_vertex_ids();
+      const auto coloring = chs->dual_greedy_coloring();
+      int nf = 0;
+      for(int p = 0; p < pPC.size()-1; p++)
+        nf += pPC(p+1) - pPC(p) - 2;
+      Eigen::MatrixXd tri_colors(nf, 3);
+      {
+        int fi = 0;
+        for(int p = 0; p < pPC.size()-1; p++)
+        {
+          const double* c = set1[coloring(vids(p)) % 9];
+          for(int j = pPC(p)+1; j < pPC(p+1)-1; j++)
+            tri_colors.row(fi++) << c[0], c[1], c[2];
+        }
+      }
+
+      auto* m = polyscope::registerSurfaceMesh("simplified hull", hV, hF);
+      m->setTransparency(hull_alpha);
+      m->setSmoothShade(false);   // per-face normals
+      m->setEdgeWidth(0.0);       // edges come from the curve network below
+
+      auto* q = m->addFaceColorQuantity("color", tri_colors);
+      q->setEnabled(true);
+
+      // Polygon boundary edges: one edge per consecutive pair in each polygon
+      // (including the closing edge), built directly from pPI/pPC.
+      const int ne = (int)pPI.size();  // sum of polygon degrees = total edges
+      Eigen::MatrixXi edge_mat(ne, 2);
+      {
+        int ei = 0;
+        for(int p = 0; p < pPC.size()-1; p++)
+        {
+          const int start = pPC(p), np = pPC(p+1) - pPC(p);
+          for(int i = 0; i < np; i++)
+            edge_mat.row(ei++) << pPI(start + i), pPI(start + (i+1) % np);
+        }
+      }
+      auto* cn = polyscope::registerCurveNetwork("hull edges", pV, edge_mat);
+      cn->setRadius(0.001, true);
+      cn->setColor(glm::vec3(0.15f, 0.15f, 0.15f));
+
       printf("dual vertices: %d\n", chs->num_dual_vertices());
     };
     update_hull();
 
-    viewer.callback_key_pressed =
-      [&](Viewer &, unsigned char key, int) -> bool
+    bool animate = false;
+
+    polyscope::state::userCallback = [&]()
     {
-      switch(key)
+      // Animate: one simplification step per rendered frame.
+      if(animate)
       {
-        case ' ':
+        if(chs->num_dual_vertices() > target)
+        {
           chs->step();
           update_hull();
-          return true;
-        case 'a': case 'A':
-          chs->simplify_to(target);
-          update_hull();
-          return true;
-        case 'r': case 'R':
-          chs = std::make_unique<ConvexHullSimplification>(V, F, max_degree_for_flips);
-          update_hull();
-          return true;
+        }
+        if(chs->num_dual_vertices() <= target)
+          animate = false;
       }
-      return false;
+
+      ImGui::Text("Dual vertices: %d", chs->num_dual_vertices());
+      ImGui::SetNextItemWidth(120.0f);
+      ImGui::InputInt("Target", &target);
+      ImGui::Checkbox("Animate to target", &animate);
+      ImGui::SetNextItemWidth(120.0f);
+      if(ImGui::SliderFloat("Hull alpha", &hull_alpha, 0.0f, 1.0f))
+        if(auto* m = polyscope::getSurfaceMesh("simplified hull"))
+          m->setTransparency(hull_alpha);
+
+      if(ImGui::Button("Step"))
+      {
+        chs->step();
+        update_hull();
+      }
+      ImGui::SameLine();
+      if(ImGui::Button("Go to target"))
+      {
+        animate = false;
+        chs->simplify_to(target);
+        update_hull();
+      }
+      ImGui::SameLine();
+      if(ImGui::Button("Reset"))
+      {
+        animate = false;
+        chs = std::make_unique<ConvexHullSimplification>(V, F, max_degree_for_flips);
+        update_hull();
+      }
     };
 
-    printf("Keys: [space] step  [a] simplify_to(%d)  [r] reset\n", target);
-    viewer.launch();
+    polyscope::show();
     return 0;
   }
 

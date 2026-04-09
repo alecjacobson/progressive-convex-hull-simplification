@@ -152,6 +152,94 @@ int ConvexHullSimplification::num_dual_vertices() const
 }
 
 // ---------------------------------------------------------------------------
+// dual_vertex_ids(): original vertex ids in dual iteration order
+// ---------------------------------------------------------------------------
+
+Eigen::VectorXi ConvexHullSimplification::dual_vertex_ids() const
+{
+  // Iterate in the same order as dual_to_primal_mesh so that result[i]
+  // is the id of the dual vertex that produces polygon i in pPI/pPC.
+  Eigen::VectorXi ids(num_dual_vertices());
+  int i = 0;
+  for(auto v = dual_.vertices_begin(); v != dual_.vertices_end(); ++v)
+    ids(i++) = static_cast<int>(v->id());
+  return ids;
+}
+
+// ---------------------------------------------------------------------------
+// dual_greedy_coloring(): greedy graph coloring of the dual's 1-skeleton
+// ---------------------------------------------------------------------------
+
+Eigen::VectorXi ConvexHullSimplification::dual_greedy_coloring(int k) const
+{
+  // Output indexed by vertex id; -1 means the vertex has been removed.
+  const int N = static_cast<int>(full_records_.size());
+  Eigen::VectorXi colors = Eigen::VectorXi::Constant(N, -1);
+
+  // --- Initial greedy assignment: smallest available label ---
+  for(auto v = dual_.vertices_begin(); v != dual_.vertices_end(); ++v)
+  {
+    const int vid = static_cast<int>(v->id());
+    std::vector<bool> used(k + 1, false);
+    auto h = v->halfedge();
+    do {
+      const int nid = static_cast<int>(h->opposite()->vertex()->id());
+      if(colors(nid) >= 0) used[colors(nid)] = true;
+      h = h->next()->opposite();
+    } while(h != v->halfedge());
+    int c = 0;
+    while(c < k && used[c]) ++c;
+    colors(vid) = c;
+  }
+
+  // --- Rebalancing post-process ---
+  // Repeatedly try to move vertices from over-populated to under-populated
+  // labels. A move is accepted only when the count gap is >= 2, which
+  // strictly decreases sum(cnt[c]^2) and guarantees termination.
+  std::vector<int> cnt(k + 1, 0);
+  for(auto v = dual_.vertices_begin(); v != dual_.vertices_end(); ++v)
+    ++cnt[colors(static_cast<int>(v->id()))];
+
+  bool changed = true;
+  while(changed)
+  {
+    changed = false;
+    for(auto v = dual_.vertices_begin(); v != dual_.vertices_end(); ++v)
+    {
+      const int vid = static_cast<int>(v->id());
+      const int cur = colors(vid);
+
+      std::vector<bool> forbidden(k + 1, false);
+      auto h = v->halfedge();
+      do {
+        const int nid = static_cast<int>(h->opposite()->vertex()->id());
+        if(colors(nid) >= 0) forbidden[colors(nid)] = true;
+        h = h->next()->opposite();
+      } while(h != v->halfedge());
+
+      // Pick the available label with lowest count that is at least 2 below
+      // cnt[cur], so the sum-of-squares potential strictly decreases.
+      int best = -1;
+      for(int c = 0; c <= k; ++c)
+      {
+        if(forbidden[c]) continue;
+        if(cnt[c] + 1 < cnt[cur] && (best == -1 || cnt[c] < cnt[best]))
+          best = c;
+      }
+      if(best != -1)
+      {
+        --cnt[cur];
+        ++cnt[best];
+        colors(vid) = best;
+        changed = true;
+      }
+    }
+  }
+
+  return colors;
+}
+
+// ---------------------------------------------------------------------------
 // get_primal_mesh(): assign face ids, convert dual → primal polygon mesh
 // ---------------------------------------------------------------------------
 

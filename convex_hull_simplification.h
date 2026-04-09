@@ -47,6 +47,18 @@ public:
   // Number of dual vertices currently remaining (= number of halfspaces).
   int num_dual_vertices() const;
 
+  // Original vertex ids of the remaining dual vertices, in the same order as
+  // the polygons produced by get_primal_mesh() (i.e. polygon i has id result[i]).
+  // Ids are stable across simplification steps: a surviving vertex always keeps
+  // the id it was assigned at construction.
+  Eigen::VectorXi dual_vertex_ids() const;
+
+  // Greedy graph coloring of the current dual: assigns an integer label in
+  // [0, k] to each dual vertex such that no two adjacent vertices share a
+  // label. Returns a VectorXi of size = initial vertex count, indexed by
+  // vertex id; removed vertices are assigned -1. k defaults to 9.
+  Eigen::VectorXi dual_greedy_coloring(int k = 9) const;
+
   // Reconstruct the primal polygon mesh from the current dual state.
   // pV  — #dual_facets x 3 primal vertex positions (one per dual face)
   // pPI — flat polygon vertex index list
