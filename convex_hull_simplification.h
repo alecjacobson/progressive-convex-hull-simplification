@@ -54,7 +54,7 @@ public:
   Eigen::VectorXi dual_vertex_ids() const;
 
   // Greedy graph coloring of the current dual: assigns an integer label in
-  // [0, k] to each dual vertex such that no two adjacent vertices share a
+  // [0, k) to each dual vertex such that no two adjacent vertices share a
   // label. Returns a VectorXi of size = initial vertex count, indexed by
   // vertex id; removed vertices are assigned -1. k defaults to 9.
   Eigen::VectorXi dual_greedy_coloring(int k = 9) const;

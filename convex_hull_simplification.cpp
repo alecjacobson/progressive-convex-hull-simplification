@@ -176,11 +176,11 @@ Eigen::VectorXi ConvexHullSimplification::dual_greedy_coloring(int k) const
   const int N = static_cast<int>(full_records_.size());
   Eigen::VectorXi colors = Eigen::VectorXi::Constant(N, -1);
 
-  // --- Initial greedy assignment: smallest available label ---
+  // --- Initial greedy assignment: smallest available label in [0, k) ---
   for(auto v = dual_.vertices_begin(); v != dual_.vertices_end(); ++v)
   {
     const int vid = static_cast<int>(v->id());
-    std::vector<bool> used(k + 1, false);
+    std::vector<bool> used(k, false);
     auto h = v->halfedge();
     do {
       const int nid = static_cast<int>(h->opposite()->vertex()->id());
@@ -188,7 +188,7 @@ Eigen::VectorXi ConvexHullSimplification::dual_greedy_coloring(int k) const
       h = h->next()->opposite();
     } while(h != v->halfedge());
     int c = 0;
-    while(c < k && used[c]) ++c;
+    while(c < k-1 && used[c]) ++c;  // cap at k-1; label is always in [0, k)
     colors(vid) = c;
   }
 
@@ -196,7 +196,7 @@ Eigen::VectorXi ConvexHullSimplification::dual_greedy_coloring(int k) const
   // Repeatedly try to move vertices from over-populated to under-populated
   // labels. A move is accepted only when the count gap is >= 2, which
   // strictly decreases sum(cnt[c]^2) and guarantees termination.
-  std::vector<int> cnt(k + 1, 0);
+  std::vector<int> cnt(k, 0);
   for(auto v = dual_.vertices_begin(); v != dual_.vertices_end(); ++v)
     ++cnt[colors(static_cast<int>(v->id()))];
 
@@ -209,7 +209,7 @@ Eigen::VectorXi ConvexHullSimplification::dual_greedy_coloring(int k) const
       const int vid = static_cast<int>(v->id());
       const int cur = colors(vid);
 
-      std::vector<bool> forbidden(k + 1, false);
+      std::vector<bool> forbidden(k, false);
       auto h = v->halfedge();
       do {
         const int nid = static_cast<int>(h->opposite()->vertex()->id());
@@ -220,7 +220,7 @@ Eigen::VectorXi ConvexHullSimplification::dual_greedy_coloring(int k) const
       // Pick the available label with lowest count that is at least 2 below
       // cnt[cur], so the sum-of-squares potential strictly decreases.
       int best = -1;
-      for(int c = 0; c <= k; ++c)
+      for(int c = 0; c < k; ++c)
       {
         if(forbidden[c]) continue;
         if(cnt[c] + 1 < cnt[cur] && (best == -1 || cnt[c] < cnt[best]))
@@ -233,6 +233,19 @@ Eigen::VectorXi ConvexHullSimplification::dual_greedy_coloring(int k) const
         colors(vid) = best;
         changed = true;
       }
+    }
+  }
+
+  // check all edges are properly colored
+  for(auto e = dual_.edges_begin(); e != dual_.edges_end(); ++e)
+  {
+    auto v1 = e->vertex();
+    auto v2 = e->opposite()->vertex();
+    if(colors(static_cast<int>(v1->id())) == colors(static_cast<int>(v2->id())))
+    {
+      throw std::runtime_error("Coloring failed: adjacent vertices " +
+        std::to_string(v1->id()) + " and " + std::to_string(v2->id()) +
+        " share color " + std::to_string(colors(static_cast<int>(v1->id()))));
     }
   }
 

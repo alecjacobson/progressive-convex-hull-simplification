@@ -122,14 +122,15 @@ dual_to_primal_mesh(
   {
     for(auto v = dual.vertices_begin(); v != dual.vertices_end(); ++v)
     {
-      auto h = v->halfedge();
+      auto h_start = v->halfedge()->opposite()->prev();
+      auto h = h_start;
       int np = 0;
       do
       {
         pPI.push_back(h->facet()->id());
-        h = h->next()->opposite();
+        h = h->opposite()->prev();
         np++;
-      } while(h != v->halfedge());
+      } while(h != h_start);
       pPC.push_back(pPC.back() + np);
     }
   }
