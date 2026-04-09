@@ -27,6 +27,8 @@ std::vector<int> num_flips_list;
 std::vector<int> local_size_list;
 std::vector<double> flip_times_list;
 
+int MAX_DEGREE_FOR_FLIPS = 100;
+
 template <typename Kernel, typename DerivedV>
 std::vector<typename Kernel::Point_3> point_list(
     const Eigen::MatrixBase<DerivedV> & V)
@@ -355,20 +357,22 @@ void confirm_all_edges_are_convex(const Polyhedron& poly)
   }
 }
 
-#warning This might even be O(N³). I think the worst case number of flips is \
-O(N²), but this implementation restarts the search for a non-convex edge \
-after every flip, which could lead to O(N³) behavior. Does the inner for \
-loop really need the `break` after the flip, or could it continue to \
-halfedges_end() even if it misses some newly non-convex edges knowing \
-that it will get them on the next pass?
 
 template <class Polyhedron>
 int flip_until_all_interior_edges_are_convex(
   Polyhedron& poly,
   const int max_flips = 1000)
 {
-  bool changed = true;
+#if false
+
+#warning This might even be O(N³). I think the worst case number of flips is \
+O(N²), but this implementation restarts the search for a non-convex edge \
+after every flip, which could lead to O(N³) behavior. Does the inner for \
+loop really need the `break` after the flip, or could it continue to \
+halfedges_end() even if it misses some newly non-convex edges knowing \
+that it will get them on the next pass?
   int num_flips = 0;
+  bool changed = true;
   while(changed)
   {
      changed = false;
@@ -400,6 +404,70 @@ int flip_until_all_interior_edges_are_convex(
      }
   }
   return num_flips;
+#else
+  int num_flips = 0;
+  // Push all internal edges onto stack
+  std::vector<typename Polyhedron::Halfedge_handle> stack;
+  stack.reserve(poly.size_of_halfedges()/2);
+  std::function<void(typename Polyhedron::Halfedge_handle)> mark_and_push_edge;
+  mark_and_push_edge = [&stack,&mark_and_push_edge](auto e)
+  {
+    if(e->opposite() < e)
+    {
+      return mark_and_push_edge(e->opposite());
+    }
+    if(e->is_border_edge()) return;
+    e->id() = false;
+    stack.push_back(e);
+  };
+
+  for(auto e = poly.halfedges_begin(); e != poly.halfedges_end(); ++e)
+  {
+    if(e > e->opposite()) continue;
+    mark_and_push_edge(e);
+  }
+  while(!stack.empty())
+  {
+    auto e = stack.back();
+    stack.pop_back();
+    // Was marked as convex in the meantime.
+    if(e->id()) { continue; }
+    auto side = edge_side<Polyhedron>(e);
+    if(side == CGAL::ON_POSITIVE_SIDE)
+    {
+      CGAL::Euler::flip_edge(e, poly);
+      num_flips++;
+      if(num_flips > max_flips)
+      {
+        throw std::runtime_error("Too many flips, something is wrong.");
+      }
+      mark_and_push_edge(e->next());
+      mark_and_push_edge(e->next()->next());
+      mark_and_push_edge(e->opposite()->next());
+      mark_and_push_edge(e->opposite()->next()->next());
+    }
+  }
+
+
+#ifndef NDEBUG
+     for(auto e = poly.halfedges_begin();
+         e != poly.halfedges_end(); ++e)
+     {
+       // only consider each undirected edge once
+       if(e > e->opposite()) continue;
+       // only internal edges can be flipped
+       if(e->is_border_edge()) continue;
+       auto side = edge_side<Polyhedron>(e);
+       if(side == CGAL::ON_POSITIVE_SIDE)
+
+        {
+          throw std::runtime_error("Found a non-convex edge after flipping, something is wrong.");
+        }
+     }
+#endif
+
+  return num_flips;
+#endif
 }
 
 template <class Polyhedron>
@@ -413,6 +481,7 @@ clip_ears(Polyhedron & one_ring_copy, typename Polyhedron::Halfedge_handle h0)
   };
 
   // Sanity check.
+#ifndef NDEBUG
   {
     int count = 0;
     auto h = h0;
@@ -425,11 +494,13 @@ clip_ears(Polyhedron & one_ring_copy, typename Polyhedron::Halfedge_handle h0)
     }
     assert(count == one_ring_copy.size_of_vertices());
   }
+#endif
 
   int walks_since_last_ear = 0;
   auto h = h0;
   auto start_vertex_id = h->vertex()->id();
   std::vector<int> path;
+  path.reserve(one_ring_copy.size_of_facets()-1);
   while(one_ring_copy.size_of_vertices() > 3)
   {
     auto w = walk(h);
@@ -558,28 +629,16 @@ Alternatively, (and maybe always for large input) we could \
   1.2 remove all triangles with negative orientation (CGAL::orientation) with respect to v->point \
 This was previously problematic to do robustly (sometimes the boundaries wouldn't match up)
 
-
+// Output by reference so that h0 is valid reference on one_ring_copy.
+// Using return value for {one_ring_copy,h0} didn't work.
 template <class Polyhedron>
-std::pair<
-  typename Polyhedron::Traits::FT,
-  Record>
-measure_vertex_erasure(
+void one_ring_triangulation(
   const Polyhedron & dual,
-  const typename Polyhedron::Vertex_handle & v)
+  const typename Polyhedron::Vertex_handle & v,
+  Polyhedron & one_ring_copy,
+  typename Polyhedron::Halfedge_handle & h0)
 {
-  //printf("measure_vertex_erasure(%d)\n", v->id());
-  using Scalar = typename Polyhedron::Traits::FT;
-  {
-    for(auto u = dual.vertices_begin(); u != dual.vertices_end(); ++u)
-    {
-      if(u->id() == v->id())
-      {
-        assert(u == v && "vertex ids should be unique");
-        break;
-      }
-    }
-  }
-
+#if false
   //// print ids of neighbors
   //{
   //  auto h = v->halfedge();
@@ -594,7 +653,7 @@ measure_vertex_erasure(
   //}
 
   // Always in [v, one-ring in order]
-  auto one_ring_copy = extract_copy_of_one_ring(dual, v);
+  one_ring_copy = extract_copy_of_one_ring(dual, v);
   //// see that ids got copied by printing them
   //{
   //  auto v0 = one_ring_copy.vertices_begin();
@@ -619,11 +678,11 @@ measure_vertex_erasure(
 
   auto v0 = one_ring_copy.vertices_begin();
   // Copy point 
-  using Point = typename decltype(one_ring_copy)::Point_3;
+  using Point = typename Polyhedron::Point_3;
   const Point p0 = v0->point();
   // half edge pointing at v0
   auto g = v0->halfedge();
-  auto h0 = one_ring_copy.erase_center_vertex(g);
+  h0 = one_ring_copy.erase_center_vertex(g);
   //{
   //  printf("  after erasing center vertex, one_ring_copy's facet has vertices: ");
   //  auto h = h0;
@@ -643,19 +702,206 @@ measure_vertex_erasure(
       CGAL::Euler::split_face(h, h->next()->next(), one_ring_copy);
     }
   }
-  IGL_TICTOC_LAMBDA;
-  tictoc();
+#else
+  using Point = typename Polyhedron::Point_3;
+  {
+    const int nv = v->degree();
+     one_ring_copy.reserve(nv, 2*nv + 2*(nv-3), nv-2);
+     const auto h_start = v->halfedge()->opposite()->prev();
+     auto h = h_start;
+     int i = 0;
+     std::vector<typename Polyhedron::Vertex_const_handle> prev_verts(2);
+     typename Polyhedron::Halfedge_handle q,H;
+     do
+     {
+       //verts[2] = pointer to h->opposite()->vertex()->point();
+       const auto vert = h->opposite()->vertex();
+       if(i < 2)
+       {
+         prev_verts[i] = vert;
+       }
+       else if(i == 2)
+       {
+         q = one_ring_copy.make_triangle(
+           prev_verts[0]->point(),
+           prev_verts[1]->point(),
+                    vert->point());
+         // copy the ids
+         q->vertex()->id() = prev_verts[0]->id();
+         q->next()->vertex()->id() = prev_verts[1]->id();
+         q->next()->next()->vertex()->id() = vert->id();
+         // H is always the border halfedge that points to 0
+         H = q->next()->opposite();
+         assert(H->vertex() == q->vertex());
+         assert(H->is_border());
+       }else if(i > 2)
+       {
+         // q verts to 0th vertex
+         //
+         //   0------3
+         //  ↑| ↖\   ↑
+         // H||  qG  s
+         //  |↓   \↘ |
+         //   1----→2
+         auto G = q->opposite();
+         assert(G->is_border());
+         auto s = one_ring_copy.add_vertex_and_facet_to_border(H,G);
+         assert(s->opposite()->is_border());
+         s->vertex()->point() = vert->point();
+         s->vertex()->id() = vert->id();
+         q = s->next();
+       }
+       i++;
+       //h = h->next()->opposite();
+       h = h->opposite()->prev();
+     } while(h != h_start);
+    h0 = q;
+  }
+#endif
+}
+
+template <class Polyhedron>
+void one_ring_triangulation_convex_via_flips(
+  const Polyhedron & dual,
+  const typename Polyhedron::Vertex_handle & v,
+  Polyhedron & one_ring_copy,
+  typename Polyhedron::Halfedge_handle & h0)
+{
+  one_ring_triangulation(dual,v,one_ring_copy,h0);
+  //printf(" %d,  %d,  %d\n",one_ring_copy.size_of_vertices(),one_ring_copy.size_of_halfedges(),one_ring_copy.size_of_facets());
+  //IGL_TICTOC_LAMBDA;
+  //tictoc();
   const int num_flips = flip_until_all_interior_edges_are_convex(one_ring_copy,1000);
-  num_flips_list.push_back(num_flips);
-  local_size_list.push_back(one_ring_copy.size_of_vertices());
-  flip_times_list.push_back(tictoc());
+  //num_flips_list.push_back(num_flips);
+  //local_size_list.push_back(one_ring_copy.size_of_vertices());
+  //flip_times_list.push_back(tictoc());
   assert(num_flips < 1000);
   //printf("confirm_all_edges_are_convex(one_ring_copy) after %d flips\n", num_flips);
 #ifndef NDEBUG
   confirm_all_edges_are_convex(one_ring_copy);
 #endif
+}
+
+template <class Polyhedron>
+void one_ring_triangulation_convex_via_convex_hull(
+  const Polyhedron & dual,
+  const typename Polyhedron::Vertex_handle & v,
+  Polyhedron & one_ring_copy,
+  typename Polyhedron::Halfedge_handle & h0)
+{
+  auto p = v->point();
+
+  using Point = typename Polyhedron::Point_3;
+  std::map<Point,int> point_to_id;
+  std::vector<Point> points;
+  points.reserve(v->degree());
+  {
+    auto h = v->halfedge();
+    do
+    {
+      auto point = h->opposite()->vertex()->point();
+      auto id = h->opposite()->vertex()->id();
+      point_to_id[point] = id;
+      points.push_back(point);
+      h = h->next()->opposite();
+    } while(h != v->halfedge());
+  }
+  CGAL::convex_hull_3(points.begin(),points.end(),one_ring_copy);
+  for(auto v = one_ring_copy.vertices_begin(); v != one_ring_copy.vertices_end(); ++v)
+  {
+    auto point = v->point();
+    auto id = point_to_id[point];
+    v->id() = id;
+  }
+
+
+  while(true)
+  {
+    bool found_any = false;
+    for(auto f = one_ring_copy.facets_begin(); f != one_ring_copy.facets_end(); )
+    {
+      auto h = f->halfedge();
+      f++;
+      const auto & a = h->vertex()->point();
+      const auto & b = h->next()->vertex()->point();
+      const auto & c = h->next()->next()->vertex()->point();
+      const auto ori = CGAL::orientation(a,b,c,p);
+      if(ori == CGAL::NEGATIVE)
+      {
+        found_any = true;
+        //printf("removing (%d %d %d) because it's oriented negatively with respect to p\n",
+        //    h->vertex()->id(),
+        //    h->next()->vertex()->id(),
+        //    h->next()->next()->vertex()->id());
+        one_ring_copy.erase_facet(h);
+      }
+    }
+    if(!found_any){ break; }
+  }
+
+  for(auto h = one_ring_copy.halfedges_begin(); h != one_ring_copy.halfedges_end(); ++h)
+  {
+    if(h->opposite()->is_border() && h->opposite()->vertex()->id() == v->halfedge()->opposite()->vertex()->id())
+    {
+      h0 = h;
+      break;
+    }
+  }
+  assert(one_ring_copy.size_of_vertices() == v->degree());
+  //printf("one_ring_copy:\n");
+  //print_faces(one_ring_copy);
+  //printf("h0: %d→%d\n",h0->opposite()->vertex()->id(),h0->vertex()->id());
+  //printf("one_ring_copy:\n");
+  //print_faces(one_ring_copy);
+  //printf("h0: %d→%d\n",h0->opposite()->vertex()->id(),h0->vertex()->id());
+  //printf("\n");
+}
+
+
+template <class Polyhedron>
+std::pair<
+  typename Polyhedron::Traits::FT,
+  Record>
+measure_vertex_erasure(
+  const Polyhedron & dual,
+  const typename Polyhedron::Vertex_handle & v)
+{
+  //printf("measure_vertex_erasure(%d)\n", v->id());
+  using Scalar = typename Polyhedron::Traits::FT;
+#ifndef NDEBUG
+  {
+    for(auto u = dual.vertices_begin(); u != dual.vertices_end(); ++u)
+    {
+      if(u->id() == v->id())
+      {
+        assert(u == v && "vertex ids should be unique");
+        break;
+      }
+    }
+  }
+#endif
+
+  auto p = v->point();
+
+  Polyhedron one_ring_copy;
+  typename Polyhedron::Halfedge_handle h0;
+  const int nv = v->degree();
+  if(nv <= MAX_DEGREE_FOR_FLIPS)
+  {
+    one_ring_triangulation_convex_via_flips(dual,v,one_ring_copy,h0);
+  }else
+  {
+    // Large enough degree might be so rare that this is irrelevant.
+    one_ring_triangulation_convex_via_convex_hull(dual,v,one_ring_copy,h0);
+  }
+
+
   
-  // Check that p0 is on the non-negative side of all faces
+  
+  
+
+  
+  // Check that p is on the non-negative side of all faces
 #ifndef NDEBUG
   for(auto f = one_ring_copy.facets_begin(); f != one_ring_copy.facets_end(); ++f)
   {
@@ -664,7 +910,7 @@ measure_vertex_erasure(
       h->vertex()->point(),
       h->next()->vertex()->point(),
       h->next()->next()->vertex()->point(),
-      p0);
+      p);
     if(ori == CGAL::NEGATIVE)
     {
       throw std::runtime_error("Removed point lies on negative side of a new face, something is wrong.");
@@ -672,7 +918,7 @@ measure_vertex_erasure(
   }
 #endif
 
-  auto [primal_volume, dual_volume, contains_origin] = primal_volume_subtended(one_ring_copy,p0);
+  auto [primal_volume, dual_volume, contains_origin] = primal_volume_subtended(one_ring_copy,p);
   //printf("primal_volume = %g, dual_volume = %g, contains_origin = %d\n",
   //  CGAL::to_double(primal_volume),
   //  CGAL::to_double(dual_volume),
@@ -777,6 +1023,13 @@ dual_to_primal_mesh(
 
 int main(int argc, char *argv[])
 {
+  // get MAX_DEGREE_FOR_FLIPS from environment
+  const char * max_degree_for_flips_env = std::getenv("MAX_DEGREE_FOR_FLIPS");
+  if(max_degree_for_flips_env)
+  {
+    MAX_DEGREE_FOR_FLIPS = std::stoi(max_degree_for_flips_env);
+  }
+  printf("MAX_DEGREE_FOR_FLIPS = %d\n", MAX_DEGREE_FOR_FLIPS);
 
   IGL_TICTOC_LAMBDA;
   // Initial input mesh
@@ -867,7 +1120,7 @@ int main(int argc, char *argv[])
   }
   printf("dual convex hull: %g secs\n",tictoc());
 
-  //// wait for user to push enter, to give time to attach profiler if desired
+  // wait for user to push enter, to give time to attach profiler if desired
   //primal_points.clear();
   //{
   //  std::cout<<"Press Enter to continue..."<<std::endl;
@@ -904,10 +1157,10 @@ int main(int argc, char *argv[])
     Record record;
   };
 
-  num_flips_list.clear();
-  num_flips_list.reserve(num_vertices);
-  local_size_list.clear();
-  local_size_list.reserve(num_vertices);
+  //num_flips_list.clear();
+  //num_flips_list.reserve(num_vertices);
+  //local_size_list.clear();
+  //local_size_list.reserve(num_vertices);
 
   std::vector<FullRecord> full_records(num_vertices);
   igl::min_heap<std::tuple<Scalar,int,int>> Q;
@@ -1000,10 +1253,9 @@ int main(int argc, char *argv[])
   //std::cout<<igl::matlab_format(Eigen::VectorXi::Map(num_flips_list.data(), num_flips_list.size()).transpose().eval(),"num_flips_list")<<std::endl;
   //std::cout<<igl::matlab_format(Eigen::VectorXi::Map(local_size_list.data(), local_size_list.size()).transpose().eval(),"local_size_list")<<std::endl;
   //std::cout<<igl::matlab_format(Eigen::VectorXd::Map(flip_times_list.data(), flip_times_list.size()).transpose().eval(),"flip_times_list")<<std::endl;
-  igl::writeDMAT("num_flips_list.dmat", Eigen::VectorXi::Map(num_flips_list.data(), num_flips_list.size()));
-  igl::writeDMAT("local_size_list.dmat", Eigen::VectorXi::Map(local_size_list.data(), local_size_list.size()));
-  igl::writeDMAT("flip_times_list.dmat", Eigen::VectorXd::Map(flip_times_list.data(), flip_times_list.size()));
-
+  //igl::writeDMAT("num_flips_list.dmat", Eigen::VectorXi::Map(num_flips_list.data(), num_flips_list.size()));
+  //igl::writeDMAT("local_size_list.dmat", Eigen::VectorXi::Map(local_size_list.data(), local_size_list.size()));
+  //igl::writeDMAT("flip_times_list.dmat", Eigen::VectorXd::Map(flip_times_list.data(), flip_times_list.size()));
 
 
 }
