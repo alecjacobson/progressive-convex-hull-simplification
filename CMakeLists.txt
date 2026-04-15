@@ -3,6 +3,9 @@ project(progressive-convex-hull-simplification)
 
 list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
+option(PCHS_INTERACTIVE "Build the interactive polyscope viewer (requires polyscope + embree)" ON)
+option(PCHS_PYTHON_BINDINGS "Build Python bindings via nanobind" OFF)
+
 # Libigl
 include(FetchContent)
 FetchContent_Declare(
@@ -24,20 +27,35 @@ add_library(SDLP INTERFACE)
 target_include_directories(SDLP INTERFACE ${sdlp_SOURCE_DIR}/include)
 
 
-# Enable the target igl::glfw
-#igl_include(glfw)
-#igl_include(imgui)
+# Enable CGAL copyleft
 igl_include(copyleft cgal)
 
+if(PCHS_INTERACTIVE)
+  igl_include(embree)
+
+  # Polyscope
+  include(FetchContent)
+  FetchContent_Declare(
+      polyscope
+      GIT_REPOSITORY https://github.com/nmwsharp/polyscope.git
+      GIT_TAG        v2.3.0
+  )
+  FetchContent_MakeAvailable(polyscope)
+endif()
+
 #
-add_library(progressive_convex_hull_simplification STATIC 
+add_library(progressive_convex_hull_simplification STATIC
   chebyshev_center.cpp
   primal_volume_subtended.cpp
+  primal_area_change.cpp
+  primal_change.cpp
+  vertex_erasure.cpp
+  convex_hull_simplification.cpp
 )
-target_include_directories(progressive_convex_hull_simplification PUBLIC 
+target_include_directories(progressive_convex_hull_simplification PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(progressive_convex_hull_simplification PUBLIC 
+target_link_libraries(progressive_convex_hull_simplification PUBLIC
   igl::core
   igl_copyleft::cgal
   SDLP
@@ -50,12 +68,40 @@ target_link_libraries(pchs PUBLIC
   progressive_convex_hull_simplification
 )
 
+if(PCHS_INTERACTIVE)
+  target_compile_definitions(pchs PRIVATE PCHS_INTERACTIVE)
+  target_link_libraries(pchs PUBLIC
+    polyscope
+    igl::embree
+  )
+endif()
+
 target_compile_options(pchs PRIVATE
   -Wno-format
   $<$<CONFIG:RelWithDebInfo>:-g>
   $<$<CONFIG:RelWithDebInfo>:-fno-omit-frame-pointer>
   $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
 )
+
+if(PCHS_PYTHON_BINDINGS)
+  find_package(Python 3.8
+    REQUIRED COMPONENTS Interpreter Development.Module
+    OPTIONAL_COMPONENTS Development.SABIModule)
+
+  FetchContent_Declare(
+    nanobind
+    GIT_REPOSITORY https://github.com/wjakob/nanobind.git
+    GIT_TAG        v2.4.0
+  )
+  FetchContent_MakeAvailable(nanobind)
+
+  nanobind_add_module(pchs_python_module STABLE_ABI pchs_bindings.cpp)
+  set_target_properties(pchs_python_module PROPERTIES OUTPUT_NAME "pchs")
+  target_link_libraries(pchs_python_module PRIVATE
+    progressive_convex_hull_simplification
+  )
+  target_compile_options(pchs_python_module PRIVATE -Wno-format)
+endif()
 
 find_program(DSYMUTIL_PROGRAM dsymutil)
 
