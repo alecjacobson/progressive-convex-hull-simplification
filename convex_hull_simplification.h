@@ -24,7 +24,6 @@ class ConvexHullSimplification
 {
 public:
   //using EK = CGAL::Exact_predicates_exact_constructions_kernel;
-#warning "using inexact"
   using EK = CGAL::Exact_predicates_inexact_constructions_kernel;
   using IK = CGAL::Exact_predicates_inexact_constructions_kernel;
   using IPolyhedron = CGAL::Polyhedron_3<IK, CGAL::Polyhedron_items_with_id_3>;
