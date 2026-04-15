@@ -14,15 +14,15 @@ Requires CMake ≥ 3.16 and a C++17 compiler. Dependencies are fetched automatic
 
 ```bash
 # Full build (includes interactive viewer; polyscope + embree fetched automatically)
-cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target pchs
 
 # Headless build (no polyscope or embree dependency)
-cmake -B build-headless -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPCHS_INTERACTIVE=OFF
+cmake -B build-headless -DCMAKE_BUILD_TYPE=Release -DPCHS_INTERACTIVE=OFF
 cmake --build build-headless --target pchs
 
 # Python bindings (nanobind fetched automatically; pass your Python executable)
-cmake -B build-py -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPCHS_INTERACTIVE=OFF -DPCHS_PYTHON_BINDINGS=ON \
+cmake -B build-py -DCMAKE_BUILD_TYPE=Release -DPCHS_INTERACTIVE=OFF -DPCHS_PYTHON_BINDINGS=ON \
       -DPython_EXECUTABLE=$(python3 -c "import sys; print(sys.executable)")
 cmake --build build-py --target pchs_python_module
 ```
