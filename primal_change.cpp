@@ -1,6 +1,4 @@
 #include "primal_change.hpp"
-#include "primal_area_change.hpp"
-#include "primal_volume_subtended.hpp"
 // So we can static_assert that we're not using it.
 #include <CGAL/Exact_predicates_exact_constructions_kernel.h>
 

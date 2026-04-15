@@ -6,42 +6,7 @@ list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 option(PCHS_INTERACTIVE "Build the interactive polyscope viewer (requires polyscope + embree)" ON)
 option(PCHS_PYTHON_BINDINGS "Build Python bindings via nanobind" OFF)
 
-# Libigl
-include(FetchContent)
-FetchContent_Declare(
-    libigl
-    GIT_REPOSITORY https://github.com/libigl/libigl.git
-    GIT_TAG 87105143e839217150f062abf6b7a66728bbebb6
-)
-FetchContent_MakeAvailable(libigl)
-
-include(FetchContent)
-FetchContent_Declare(
-    SDLP
-    GIT_REPOSITORY https://github.com/alecjacobson/SDLP.git
-    GIT_TAG        origin/main
-)
-FetchContent_Populate(SDLP)
-# Make an interface target so you can link it normally
-add_library(SDLP INTERFACE)
-target_include_directories(SDLP INTERFACE ${sdlp_SOURCE_DIR}/include)
-
-
-# Enable CGAL copyleft
-igl_include(copyleft cgal)
-
-if(PCHS_INTERACTIVE)
-  igl_include(embree)
-
-  # Polyscope
-  include(FetchContent)
-  FetchContent_Declare(
-      polyscope
-      GIT_REPOSITORY https://github.com/nmwsharp/polyscope.git
-      GIT_TAG        v2.3.0
-  )
-  FetchContent_MakeAvailable(polyscope)
-endif()
+include(dependencies)
 
 #
 add_library(progressive_convex_hull_simplification STATIC
@@ -82,17 +47,6 @@ target_compile_options(pchs PRIVATE
 )
 
 if(PCHS_PYTHON_BINDINGS)
-  find_package(Python 3.8
-    REQUIRED COMPONENTS Interpreter Development.Module
-    OPTIONAL_COMPONENTS Development.SABIModule)
-
-  FetchContent_Declare(
-    nanobind
-    GIT_REPOSITORY https://github.com/wjakob/nanobind.git
-    GIT_TAG        v2.4.0
-  )
-  FetchContent_MakeAvailable(nanobind)
-
   nanobind_add_module(pchs_python_module STABLE_ABI pchs_bindings.cpp)
   set_target_properties(pchs_python_module PROPERTIES OUTPUT_NAME "pchs")
   target_link_libraries(pchs_python_module PRIVATE
