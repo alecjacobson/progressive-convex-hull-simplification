@@ -82,16 +82,9 @@ std::vector<typename Polyhedron::Traits::Point_3> dual_points_list(
   return dpts;
 }
 
-// Convert a simplified dual polyhedron back to a primal polygon mesh.
-// x0_exact is the Chebyshev center (may be in a different kernel than dual).
-// Requires face ids to be set on dual (0..size_of_facets-1).
-// Returns (pV, pPI, pPC): primal vertices, polygon index list, polygon count list.
 template <class Polyhedron, typename x0_type>
-std::tuple<
-    Eigen::Matrix<typename Polyhedron::Traits::FT, Eigen::Dynamic, 3, Eigen::RowMajor>,
-    Eigen::VectorXi,
-    Eigen::VectorXi>
-dual_to_primal_mesh(
+Eigen::Matrix<typename Polyhedron::Traits::FT, Eigen::Dynamic, 3, Eigen::RowMajor>
+dual_to_primal_points(
   const Polyhedron & dual,
   const x0_type & x0_exact)
 {
@@ -117,20 +110,45 @@ dual_to_primal_mesh(
       pV.row(f->id()) << p.x(), p.y(), p.z();
     }
   }
+  return pV;
+}
+
+// Convert a simplified dual polyhedron back to a primal polygon mesh.
+// x0_exact is the Chebyshev center (may be in a different kernel than dual).
+// Requires face ids to be set on dual (0..size_of_facets-1).
+// Returns (pV, pPI, pPC): primal vertices, polygon index list, polygon count list.
+template <class Polyhedron, typename x0_type>
+std::tuple<
+    Eigen::Matrix<typename Polyhedron::Traits::FT, Eigen::Dynamic, 3, Eigen::RowMajor>,
+    Eigen::VectorXi,
+    Eigen::VectorXi>
+dual_to_primal_mesh(
+  const Polyhedron & dual,
+  const x0_type & x0_exact)
+{
+  const auto pV = dual_to_primal_points(dual, x0_exact);
   std::vector<int> pPI;
   std::vector<int> pPC = {0};
   {
     for(auto v = dual.vertices_begin(); v != dual.vertices_end(); ++v)
     {
-      auto h_start = v->halfedge()->opposite()->prev();
-      auto h = h_start;
       int np = 0;
-      do
+      if(v->halfedge() == nullptr)
       {
-        pPI.push_back(h->facet()->id());
-        h = h->opposite()->prev();
-        np++;
-      } while(h != h_start);
+#ifndef NDEBUG
+        printf("Warning: vertex %d has no halfedge\n", v->id());
+#endif
+      }else
+      {
+        auto h_start = v->halfedge()->opposite()->prev();
+        auto h = h_start;
+        do
+        {
+          pPI.push_back(h->facet()->id());
+          h = h->opposite()->prev();
+          np++;
+        } while(h != h_start);
+      }
       pPC.push_back(pPC.back() + np);
     }
   }

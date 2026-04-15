@@ -175,6 +175,143 @@ std::tuple<typename DerivedV::Scalar, typename DerivedV::Scalar,bool> primal_vol
   return {primal_volume, dual_volume,contains_origin};
 }
 
+template 
+  <typename Polyhedron>
+std::tuple<typename Polyhedron::Traits::FT, bool> primal_volume_subtended_explicit(
+  const Polyhedron & poly,
+  const typename Polyhedron::Point_3 & p0)
+{
+  //printf("primal_volume_subtended_explicit\n");
+  using Scalar = typename Polyhedron::Traits::FT;
+  using Point = typename Polyhedron::Point_3;
+
+  const auto dual_triangle_to_point = [](const Point & A, const Point & B, const Point & C)
+  {
+    // N = (A-B)×(C-B)
+    const auto n = CGAL::cross_product(A - B, C - B);
+    const auto bc = CGAL::centroid(A, B, C) - CGAL::ORIGIN;
+    const auto beta = CGAL::scalar_product(n, bc);
+    // n / beta
+    return CGAL::ORIGIN + (n / beta);
+  };
+
+  const auto polygon_vector_area = [](const std::vector<Point> & vertices)
+  {
+    using Vector = typename CGAL::Kernel_traits<Point>::Kernel::Vector_3;
+
+    Vector sum = CGAL::NULL_VECTOR;
+
+    for (int i = 0; i < vertices.size(); i++)
+    {
+      const auto & v0 = vertices[i];
+      const auto & v1 = vertices[(i + 1) % vertices.size()];
+
+      sum = sum + CGAL::cross_product(v0 - CGAL::ORIGIN, v1 - CGAL::ORIGIN);
+    }
+
+    // Static assert that Scalar is not Epeck
+    static_assert(!std::is_same_v<Scalar, CGAL::Epeck::FT>, "Scalar must not be Epeck");
+    return sum;
+  };
+  const auto centroid = [](const std::vector<Point> & vertices)
+  { 
+    Point bc(0,0,0);
+    for(const auto & v : vertices)
+      bc = bc + (v - CGAL::ORIGIN);
+    return ((bc-CGAL::ORIGIN) / Scalar(vertices.size()));
+  };
+ 
+  Scalar volume_bottom = 0;
+  // consider each vertex
+  for(typename Polyhedron::Vertex_const_iterator v = poly.vertices_begin(); v != poly.vertices_end(); ++v)
+  {
+    //printf("v->id() = %d\n", v->id());
+    const auto hv = v->halfedge();
+    auto h = hv;
+    std::vector<Point> primal_vertices;
+    // consider each facet incident on the vertex
+    do{
+      //printf("  h: %d,%d | %s\n",
+      // h->vertex()->id(),
+      // h->opposite()->vertex()->id(),
+      // h->is_border() ? "border" : "internal");
+      if(h->is_border()) 
+      {
+        primal_vertices.push_back(dual_triangle_to_point(
+            h->vertex()->point(),
+            p0,
+            h->opposite()->vertex()->point()));
+        primal_vertices.push_back(dual_triangle_to_point(
+            h->vertex()->point(),
+            h->next()->vertex()->point(),
+            p0));
+      }else
+      {
+        primal_vertices.push_back(dual_triangle_to_point(
+            h->vertex()->point(),
+            h->next()->vertex()->point(),
+            h->next()->next()->vertex()->point()));
+      }
+      h = h->next()->opposite();
+    } while(h != hv);
+    // area of the primal polygon
+    const auto n_v = polygon_vector_area(primal_vertices);
+    const auto bc_v = centroid(primal_vertices);
+    // volume += n⋅bc
+    volume_bottom += CGAL::scalar_product(n_v, bc_v);
+  }
+  Scalar volume_top = 0;
+  // consider each half-edge
+  {
+    std::vector<Point> primal_vertices;
+    typename Polyhedron::Halfedge_const_iterator h = poly.halfedges_begin();
+    for(; h != poly.halfedges_end(); ++h)
+    {
+      if(h->is_border()) break;
+    }
+    //printf("h: %d,%d\n", h->vertex()->id(), h->opposite()->vertex()->id());
+    const auto h0 = h;
+    do
+    {
+      //printf("h: %d,%d | %s\n",
+      //  h->vertex()->id(),
+      //  h->opposite()->vertex()->id(),
+      //  h->is_border() ? "border" : "internal");
+      const auto p = dual_triangle_to_point(
+          h->vertex()->point(),
+          h->opposite()->vertex()->point(),
+          p0);
+      //printf("  %g, %g, %g\n", p.x(), p.y(), p.z());
+      primal_vertices.push_back(p);
+      h = h->next();
+    }while(h != h0);
+    const auto n = polygon_vector_area(primal_vertices);
+    const auto bc = centroid(primal_vertices);
+    volume_top += CGAL::scalar_product(n, bc);
+  }
+  const Scalar volume = (volume_top-volume_bottom)/Scalar(6);
+  //printf("volume_bottom = %g\n", volume_bottom);
+  //printf("volume_top = %g\n", volume_top);
+  //printf("volume = %g\n", volume);
+
+  // Check that origin is on negative side of all faces
+  bool contains_origin = false;
+  for(typename Polyhedron::Facet_const_iterator f = poly.facets_begin(); f != poly.facets_end(); ++f)
+  {
+    const auto & A = f->halfedge()->vertex()->point();
+    const auto & B = f->halfedge()->next()->vertex()->point();
+    const auto & C = f->halfedge()->next()->next()->vertex()->point();
+    const auto ori = CGAL::orientation(A, B, C, Point(0,0,0));
+    if(ori != CGAL::ON_NEGATIVE_SIDE)
+    {
+      contains_origin = true;
+      break;
+    }
+  }
+
+  return {volume , contains_origin};
+}
+
 template std::tuple<Eigen::Matrix<double, -1, 3, 1, -1, 3>::Scalar, Eigen::Matrix<double, -1, 3, 1, -1, 3>::Scalar, bool> primal_volume_subtended<Eigen::Matrix<double, -1, 3, 1, -1, 3>, Eigen::Matrix<int, -1, 1, 0, -1, 1>, Eigen::Matrix<int, -1, 1, 0, -1, 1>>(Eigen::MatrixBase<Eigen::Matrix<double, -1, 3, 1, -1, 3>> const&, Eigen::MatrixBase<Eigen::Matrix<int, -1, 1, 0, -1, 1>> const&, Eigen::MatrixBase<Eigen::Matrix<int, -1, 1, 0, -1, 1>> const&, int);
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/Polyhedron_items_with_id_3.h>
@@ -186,3 +323,6 @@ template std::tuple<
   CGAL::Polyhedron_3<CGAL::Epeck, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>::Traits::FT, 
   CGAL::Polyhedron_3<CGAL::Epeck, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>::Traits::FT, 
   bool> primal_volume_subtended<CGAL::Polyhedron_3<CGAL::Epeck, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>>(CGAL::Polyhedron_3<CGAL::Epeck, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>> const&, CGAL::Polyhedron_3<CGAL::Epeck, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>::Point_3 const&);
+template std::tuple<
+  CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>::Traits::FT,
+  bool> primal_volume_subtended_explicit<CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>>(CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>> const&, CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>::Point_3 const&);

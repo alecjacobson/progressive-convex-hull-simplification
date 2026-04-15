@@ -1,11 +1,16 @@
 #include "convex_hull_simplification.h"
 
 #include <igl/read_triangle_mesh.h>
+#include <igl/write_triangle_mesh.h>
+#include <igl/writeDMAT.h>
 #include <igl/icosahedron.h>
 #include <igl/matlab_format.h>
 #include <igl/get_seconds.h>
+#include <igl/remove_duplicate_vertices.h>
 #include <igl/copyleft/cgal/polyhedron_to_mesh.h>
 #include <igl/copyleft/cgal/assign.h>
+
+#include "write_polygon_ply.h"
 
 #ifdef PCHS_INTERACTIVE
 #include <igl/polygons_to_triangles.h>
@@ -51,39 +56,6 @@ void print_in_matlab_format(const Polyhedron & poly, const std::string prefix = 
   std::cout<<igl::matlab_format(      PC.transpose().eval(),      prefix+"PC")<<std::endl;
 }
 
-template <class Polyhedron>
-void print_VF(const Polyhedron & poly, const std::string prefix = "")
-{
-  int max_id = -1;
-  printf("print_VF\n");
-  for(auto v = poly.vertices_begin(); v != poly.vertices_end(); ++v)
-  {
-    printf("v->id() = %zu\n",v->id());
-    if(int(v->id()) > max_id) { max_id = int(v->id()); }
-  }
-  printf("-----------------\n");
-  printf("max_id = %d\n",max_id);
-  Eigen::Matrix<typename Polyhedron::Traits::FT,Eigen::Dynamic,3,Eigen::RowMajor> V(max_id+1,3);
-  V.setConstant(std::numeric_limits<typename Polyhedron::Traits::FT>::quiet_NaN());
-  for(auto v = poly.vertices_begin(); v != poly.vertices_end(); ++v)
-    V.row(v->id()) << v->point().x(), v->point().y(), v->point().z();
-  assert(poly.is_pure_triangle());
-  Eigen::Matrix<int,Eigen::Dynamic,3,Eigen::RowMajor> F(poly.size_of_facets(),3);
-  {
-    int k = 0;
-    for(auto f = poly.facets_begin(); f != poly.facets_end(); ++f)
-    {
-      auto h = f->halfedge();
-      F.row(k++) <<
-        h->vertex()->id(),
-        h->next()->vertex()->id(),
-        h->next()->next()->vertex()->id();
-    }
-    assert(k == (int)poly.size_of_facets());
-  }
-  std::cout<<igl::matlab_format(V,prefix+"V")<<std::endl;
-  std::cout<<igl::matlab_format_index(F,prefix+"F")<<std::endl;
-}
 
 template <class Polyhedron>
 void print_faces(const Polyhedron & poly)
@@ -112,10 +84,44 @@ int main(int argc, char *argv[])
   bool interactive = false;
   int target = 18;
   const char * mesh_file = nullptr;
+  const char * primal_output  = nullptr;
+  const char * dual_output    = nullptr;
+  const char * primal_initial = nullptr;
+  const char * dual_initial   = nullptr;
+  bool write_costs = false;
+  const char * costs_output   = nullptr;  // nullptr = use default name
+  bool write_popped_ids = false;
+  const char * popped_ids_output = nullptr;  // nullptr = use default name
+  CostFunction cost_function = CostFunction::PRIMAL_VOLUME;
   for(int i = 1; i < argc; i++)
   {
     const std::string arg(argv[i]);
-    if(arg == "--stats")       { print_stats = true; }
+    if(arg == "--help" || arg == "-h")
+    {
+      printf(
+        "Usage: pchs [options] [mesh.ply]\n"
+        "\n"
+        "Defaults to an icosahedron if no mesh is given.\n"
+        "\n"
+        "Options:\n"
+        "  --target N              Simplify to N dual vertices / halfspaces (default: 18)\n"
+        "  --cost-function F       Cost metric: 'volume' or 'area' (default: volume)\n"
+        "  --primal-output file    Write simplified hull as a polygon PLY\n"
+        "  --dual-output file      Write simplified dual as a triangle mesh\n"
+        "  --primal-initial file   Write initial (unsimplified) primal hull\n"
+        "  --dual-initial file     Write initial (unsimplified) dual hull\n"
+        "  --costs [file.dmat]     Write per-vertex removal costs (default: <stem>-costs.dmat)\n"
+        "  --popped-ids [file.dmat]\n"
+        "                          Write removal order (default: <stem>-popped-ids.dmat)\n"
+        "  --stats                 Print per-phase timing after simplification\n"
+#ifdef PCHS_INTERACTIVE
+        "  --interactive           Open a polyscope viewer\n"
+#endif
+        "  --help, -h              Show this message\n"
+      );
+      return 0;
+    }
+    else if(arg == "--stats")       { print_stats = true; }
     else if(arg == "--interactive")
     {
 #ifdef PCHS_INTERACTIVE
@@ -125,16 +131,70 @@ int main(int argc, char *argv[])
       return 1;
 #endif
     }
-    else if(arg == "--target" && i+1 < argc) { target = std::stoi(argv[++i]); }
+    else if(arg == "--target"          && i+1 < argc) { target          = std::stoi(argv[++i]); }
+    else if(arg == "--primal-output"   && i+1 < argc) { primal_output   = argv[++i]; }
+    else if(arg == "--dual-output"     && i+1 < argc) { dual_output     = argv[++i]; }
+    else if(arg == "--primal-initial"  && i+1 < argc) { primal_initial  = argv[++i]; }
+    else if(arg == "--dual-initial"    && i+1 < argc) { dual_initial    = argv[++i]; }
+    else if(arg == "--costs")
+    {
+      write_costs = true;
+      if(i+1 < argc && argv[i+1][0] != '-') costs_output = argv[++i];
+    }
+    else if(arg == "--popped-ids")
+    {
+      write_popped_ids = true;
+      if(i+1 < argc && argv[i+1][0] != '-') popped_ids_output = argv[++i];
+    }
+    else if(arg == "--cost-function" && i+1 < argc)
+    {
+      const std::string cf(argv[++i]);
+      if(cf == "volume")     cost_function = CostFunction::PRIMAL_VOLUME;
+      else if(cf == "area")  cost_function = CostFunction::PRIMAL_AREA_CHANGE;
+      else { fprintf(stderr, "error: unknown cost function '%s' (use 'volume' or 'area')\n", cf.c_str()); return 1; }
+    }
     else                       { mesh_file = argv[i]; }
   }
+
+  // Derive default output filenames from the input stem, or use fallbacks.
+  auto file_stem = [](const char* path) -> std::string
+  {
+    std::string s(path);
+    auto sep = s.find_last_of("/\\");
+    if(sep != std::string::npos) s = s.substr(sep + 1);
+    auto dot = s.rfind('.');
+    if(dot != std::string::npos) s = s.substr(0, dot);
+    return s;
+  };
+  const std::string stem = mesh_file ? file_stem(mesh_file) : "";
+  const std::string primal_path = primal_output ? primal_output
+                                : (stem.empty() ? "primal-output.ply" : (stem + "-primal.ply"));
+  const std::string dual_path   = dual_output   ? dual_output
+                                : (stem.empty() ? "dual-output.ply"   : (stem + "-dual.ply"));
+  const std::string costs_path      = costs_output      ? costs_output
+                                    : (stem.empty() ? "costs.dmat"      : (stem + "-costs.dmat"));
+  const std::string popped_ids_path = popped_ids_output ? popped_ids_output
+                                    : (stem.empty() ? "popped-ids.dmat" : (stem + "-popped-ids.dmat"));
 
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;
   if(mesh_file)
+  {
     igl::read_triangle_mesh(mesh_file, V, F);
+    if(V.rows() == 3*F.rows())
+    {
+      const int nv0 = V.rows();
+      Eigen::VectorXi _1, _2;
+      igl::remove_duplicate_vertices(
+          Eigen::MatrixXd(V),Eigen::MatrixXi(F),0,
+          V,_1,_2,F);
+      printf("Merged %d duplicate vertices from STL file\n", nv0 - V.rows());
+    }
+  }
   else
+  {
     igl::icosahedron(V, F);
+  }
 
   printf("|V| = %d, |F| = %d\n", V.rows(), F.rows());
 
@@ -142,7 +202,7 @@ int main(int argc, char *argv[])
   // --- Interactive mode (polyscope) ---
   if(interactive)
   {
-    auto chs = std::make_unique<ConvexHullSimplification>(V, F, max_degree_for_flips);
+    auto chs = std::make_unique<ConvexHullSimplification>(V, F, max_degree_for_flips, cost_function);
 
     polyscope::init();
     polyscope::options::programName = "Progressive Convex Hull Simplification";
@@ -177,6 +237,8 @@ int main(int argc, char *argv[])
 
     float hull_alpha = 0.85f;  // opacity: 1=opaque, 0=transparent
     int   color_mode = 1;      // 0 = graph coloring, 1 = normal pseudocolor
+    // cost_function_idx mirrors cost_function: 0=volume, 1=area
+    int cost_function_idx = (cost_function == CostFunction::PRIMAL_AREA_CHANGE) ? 1 : 0;
 
     // Helper: rebuild the simplified-hull mesh and polygon-edge curve network
     // in polyscope from the current chs state.
@@ -323,6 +385,21 @@ int main(int argc, char *argv[])
           if(auto* m = polyscope::getSurfaceMesh("simplified hull"))
             m->setTransparency(hull_alpha);
         {
+          static const char* cf_modes[] = {"Volume", "Area"};
+          ImGui::SetNextItemWidth(120.0f);
+          if(ImGui::Combo("Cost function", &cost_function_idx, cf_modes, 2))
+          {
+            animate = false;
+            const int current_n = chs->num_dual_vertices();
+            cost_function = (cost_function_idx == 1)
+              ? CostFunction::PRIMAL_AREA_CHANGE
+              : CostFunction::PRIMAL_VOLUME;
+            chs = std::make_unique<ConvexHullSimplification>(V, F, max_degree_for_flips, cost_function);
+            chs->simplify_to(current_n);
+            update_hull();
+          }
+        }
+        {
           static const char* modes[] = {"Graph coloring", "Normal pseudocolor"};
           ImGui::SetNextItemWidth(180.0f);
           if(ImGui::Combo("Coloring", &color_mode, modes, 2))
@@ -345,7 +422,7 @@ int main(int argc, char *argv[])
         if(ImGui::Button("Reset"))
         {
           animate = false;
-          chs = std::make_unique<ConvexHullSimplification>(V, F, max_degree_for_flips);
+          chs = std::make_unique<ConvexHullSimplification>(V, F, max_degree_for_flips, cost_function);
           update_hull();
         }
       }
@@ -357,24 +434,129 @@ int main(int argc, char *argv[])
   }
 #endif // PCHS_INTERACTIVE
 
+  // Helper: write a file and print a one-line status, or print an error.
+  auto write_poly = [](const std::string & path,
+                       const Eigen::MatrixXd & V,
+                       const Eigen::VectorXi & PI,
+                       const Eigen::VectorXi & PC)
+  {
+    if(!write_polygon_ply(path, V, PI, PC))
+      fprintf(stderr, "error: failed to write %s\n", path.c_str());
+    else
+      printf("wrote: %s\n", path.c_str());
+  };
+  auto write_tri = [](const std::string & path,
+                      const Eigen::MatrixXd & V,
+                      const Eigen::MatrixXi & F)
+  {
+    if(!igl::write_triangle_mesh(path, V, F))
+      fprintf(stderr, "error: failed to write %s\n", path.c_str());
+    else
+      printf("wrote: %s\n", path.c_str());
+  };
+
+  //// Wait for user to press Enter before starting simplification, to give them a
+  //// chance to read the initial stats and outputs.
+  //{
+  //  printf("Press Enter to start simplification...");
+  //  std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+  //}
+
   // --- Non-interactive mode ---
-  ConvexHullSimplification chs(V, F, max_degree_for_flips);
+  ConvexHullSimplification chs(V, F, max_degree_for_flips, cost_function);
+
+  // Initial outputs (before any simplification).
+  double area_initial = 0.0;
+  double volume_initial = 0.0;
+  const auto primal_area_and_volume = [](auto & chs) -> std::pair<double, double>
+  {
+    auto [pV, pPI, pPC] = chs.get_primal_mesh();
+    Eigen::MatrixXi pF;
+    Eigen::VectorXi _;
+    igl::polygons_to_triangles(pPI, pPC, pF, _);
+    Eigen::VectorXd pA;
+    igl::doublearea(pV, pF, pA);
+    double area = 0.5 * pA.sum();
+    double volume;
+    {
+      Eigen::RowVector3d _;
+      igl::centroid(pV,pF,_,volume);
+    }
+    return {area, volume};
+  };
+  if(print_stats)
+  {
+    std::tie(area_initial, volume_initial) = primal_area_and_volume(chs);
+  }
+
+  if(primal_initial)
+  {
+    auto [ipV, ipPI, ipPC] = chs.get_primal_mesh();
+    write_poly(primal_initial, ipV, ipPI, ipPC);
+  }
+  
+  if(dual_initial)
+  {
+    auto [idV, idF] = chs.get_dual_mesh();
+    write_tri(dual_initial, idV, idF);
+  }
+
   chs.simplify_to(target);
 
   if(print_stats)
   {
+    auto [area_final, volume_final] = primal_area_and_volume(chs);
+    const Eigen::VectorXd costs = chs.popped_dual_vertex_costs();
+    const Eigen::VectorXi ids = chs.popped_dual_vertex_ids();
+    //printf("last id: %d\n",ids(ids.size()-1));
+
     const auto s = chs.stats();
-    printf("primal hull:  %8.4f s\n", s.t_primal_hull);
-    printf("dual hull:    %8.4f s\n", s.t_dual_hull);
-    printf("queue init:   %8.4f s\n", s.t_queue_init);
-    printf("simplify_to:  %8.4f s\n", s.t_last_simplify);
-    printf("total:        %8.4f s\n",
+    printf("primal hull:  %8.4g s\n", s.t_primal_hull);
+    printf("dual hull:    %8.4g s\n", s.t_dual_hull);
+    printf("queue init:   %8.4g s\n", s.t_queue_init);
+    printf("simplify_to:  %8.4g s\n", s.t_last_simplify);
+    printf("total:        %8.4g s\n",
       s.t_primal_hull + s.t_dual_hull + s.t_queue_init + s.t_last_simplify);
+    printf("initial area:  %8.4g\n", area_initial);
+    printf("final area:    %8.4g\n", area_final);
+    if(cost_function == CostFunction::PRIMAL_AREA_CHANGE)
+    {
+      printf("∫ final area:  %8.4g\n", area_initial + costs(ids).sum());
+    }
+    printf("f/i area:      %8.4g\n", area_final / area_initial);
+    printf("initial volume:%8.4g\n", volume_initial);
+    printf("final volume:  %8.4g\n", volume_final);
+    if(cost_function == CostFunction::PRIMAL_VOLUME)
+    {
+      printf("∫ vol change:  %8.4g\n", volume_initial + costs(ids).sum());
+    }
+    printf("f/i volume:    %8.4g\n", volume_final / volume_initial);
   }
 
-  auto [pV, pPI, pPC] = chs.get_primal_mesh();
-  printf("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n");
-  std::cout<<igl::matlab_format(pV,"pV")<<std::endl;
-  std::cout<<igl::matlab_format_index(pPI.transpose().eval(),"pPI")<<std::endl;
-  std::cout<<igl::matlab_format(      pPC.transpose().eval(),"pPC")<<std::endl;
+  if(write_costs)
+  {
+    const Eigen::VectorXd costs = chs.popped_dual_vertex_costs();
+    if(!igl::writeDMAT(costs_path, costs))
+      fprintf(stderr, "error: failed to write %s\n", costs_path.c_str());
+    else
+      printf("wrote: %s\n", costs_path.c_str());
+  }
+
+  if(write_popped_ids)
+  {
+    const Eigen::VectorXi ids = chs.popped_dual_vertex_ids();
+    if(!igl::writeDMAT(popped_ids_path, ids))
+      fprintf(stderr, "error: failed to write %s\n", popped_ids_path.c_str());
+    else
+      printf("wrote: %s\n", popped_ids_path.c_str());
+  }
+
+  {
+    auto [pV, pPI, pPC] = chs.get_primal_mesh();
+    write_poly(primal_path, pV, pPI, pPC);
+  }
+  {
+    auto [dV, dF] = chs.get_dual_mesh();
+    write_tri(dual_path, dV, dF);
+  }
 }

@@ -20,6 +20,11 @@ cmake --build build --target pchs
 # Headless build (no polyscope or embree dependency)
 cmake -B build-headless -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPCHS_INTERACTIVE=OFF
 cmake --build build-headless --target pchs
+
+# Python bindings (nanobind fetched automatically; pass your Python executable)
+cmake -B build-py -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPCHS_INTERACTIVE=OFF -DPCHS_PYTHON_BINDINGS=ON \
+      -DPython_EXECUTABLE=$(python3 -c "import sys; print(sys.executable)")
+cmake --build build-py --target pchs_python_module
 ```
 
 ## Usage
@@ -33,10 +38,12 @@ Defaults to an icosahedron if no mesh is given.
 | Option | Description |
 |---|---|
 | `--target N` | Simplify to N dual vertices / halfspaces (default: 18) |
-| `--interactive` | Open a viewer (see below) |
+| `--primal-output file.ply` | Write simplified hull as a polygon PLY (default: `<stem>-primal.ply`) |
+| `--dual-output file` | Write simplified dual as a triangle mesh in any format igl supports (default: `<stem>-dual.ply`) |
+| `--interactive` | Open a viewer (see below; requires `PCHS_INTERACTIVE=ON` build) |
 | `--stats` | Print per-phase timing after simplification |
 
-In non-interactive mode the simplified hull is printed to stdout as a polygon mesh in libigl format (`pV`, `pPI`, `pPC`) suitable for pasting into MATLAB/Octave.
+In non-interactive mode the primal (polygon mesh) and dual (triangle mesh) outputs are written to files. Default filenames are derived from the input filename stem, e.g. `Actaeon.ply` → `Actaeon-primal.ply` and `Actaeon-dual.ply`.
 
 ### Interactive viewer
 
@@ -76,3 +83,33 @@ chs.stats();                          // timing breakdown (t_primal_hull, t_dual
 ```
 
 `MAX_DEGREE_FOR_FLIPS` (env var, default 100) controls the vertex-degree threshold above which the convex-hull-based one-ring triangulation is used instead of the flip-based method.
+
+## Python API
+
+After building with `-DPCHS_PYTHON_BINDINGS=ON`, add the build directory to `PYTHONPATH` and import `pchs`:
+
+```python
+import pchs
+import numpy as np
+import igl
+
+V, F = igl.icosahedron()  # or load your own mesh with igl.read_triangle_mesh()
+
+chs = pchs.ConvexHullSimplification(V, F,
+    max_degree_for_flips=100,
+    cost_function=pchs.CostFunction.volume)
+
+chs.simplify_to(18)
+
+pV, pPI, pPC = chs.get_primal_mesh()   # polygon mesh
+dV, dF       = chs.get_dual_mesh()     # triangle mesh
+
+costs = chs.popped_dual_vertex_costs() # VectorXd, NaN for surviving vertices
+ids   = chs.popped_dual_vertex_ids()   # removal order
+
+s = chs.stats()
+print(s.t_primal_hull, s.t_dual_hull, s.t_queue_init, s.t_last_simplify)
+
+# Or use the one-shot wrapper:
+pV, pPI, pPC = pchs.simplify_convex_hull(V, F, 18)
+```

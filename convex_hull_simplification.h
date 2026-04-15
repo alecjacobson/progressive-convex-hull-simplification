@@ -23,7 +23,9 @@
 class ConvexHullSimplification
 {
 public:
-  using EK = CGAL::Exact_predicates_exact_constructions_kernel;
+  //using EK = CGAL::Exact_predicates_exact_constructions_kernel;
+#warning "using inexact"
+  using EK = CGAL::Exact_predicates_inexact_constructions_kernel;
   using IK = CGAL::Exact_predicates_inexact_constructions_kernel;
   using IPolyhedron = CGAL::Polyhedron_3<IK, CGAL::Polyhedron_items_with_id_3>;
   using Scalar = IK::FT;
@@ -33,7 +35,8 @@ public:
   ConvexHullSimplification(
     const Eigen::MatrixXd & V,
     const Eigen::MatrixXi & F,
-    int max_degree_for_flips = 100);
+    int max_degree_for_flips = 100,
+    CostFunction cost_function = CostFunction::PRIMAL_VOLUME);
 
   // Drain stale queue entries, then pop and apply the cheapest non-stale
   // vertex erasure. Updates neighbor costs. Returns false if the queue is
@@ -65,6 +68,13 @@ public:
   // pPC — cumulative counts (size = num_dual_vertices() + 1)
   std::tuple<Eigen::MatrixXd, Eigen::VectorXi, Eigen::VectorXi> get_primal_mesh();
 
+  // Extract the current dual mesh as a triangle mesh (V, F).
+  // Vertex ids are remapped to a contiguous 0-based range.
+  std::pair<Eigen::MatrixXd, Eigen::MatrixXi> get_dual_mesh() const;
+
+  Eigen::VectorXd popped_dual_vertex_costs() const;
+  Eigen::VectorXi popped_dual_vertex_ids() const;
+
   struct Stats
   {
     double t_primal_hull;    // convex_hull_3 on input points
@@ -86,8 +96,10 @@ private:
   EK::Point_3 x0_exact_;
   IPolyhedron dual_;
   std::vector<FullRecord> full_records_;
+  std::vector<int> pop_ids_;
   igl::min_heap<std::tuple<Scalar,int,int>> Q_;
   int max_degree_for_flips_;
+  CostFunction cost_function_;
   Stats stats_;
 };
 
@@ -97,4 +109,5 @@ simplify_convex_hull(
   const Eigen::MatrixXd & V,
   const Eigen::MatrixXi & F,
   int target_num_dual_vertices,
-  int max_degree_for_flips = 100);
+  int max_degree_for_flips = 100,
+  CostFunction cost_function = CostFunction::PRIMAL_VOLUME);

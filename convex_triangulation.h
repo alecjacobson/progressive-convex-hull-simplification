@@ -181,6 +181,8 @@ void one_ring_triangulation(
   using Point = typename Polyhedron::Point_3;
   const int nv = v->degree();
   one_ring_copy.reserve(nv, 2*nv + 2*(nv-3), nv-2);
+  // CGAL crashing on ->opposite() here sometimes...
+  // Hard to reproduce in debug mode: Ta Prohm.stl, Processing Pan.stl
   const auto h_start = v->halfedge()->opposite()->prev();
   auto h = h_start;
   int i = 0;

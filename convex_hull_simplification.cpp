@@ -6,6 +6,8 @@
 #include <igl/copyleft/cgal/assign.h>
 
 #include <CGAL/convex_hull_3.h>
+#include <CGAL/bounding_box.h>
+
 
 #include <cassert>
 #include <limits>
@@ -17,8 +19,10 @@
 ConvexHullSimplification::ConvexHullSimplification(
   const Eigen::MatrixXd & V,
   const Eigen::MatrixXi & F,
-  int max_degree_for_flips)
+  int max_degree_for_flips,
+  CostFunction cost_function)
   : max_degree_for_flips_(max_degree_for_flips)
+  , cost_function_(cost_function)
   , stats_({0, 0, 0, 0})
 {
   using EPolyhedron = CGAL::Polyhedron_3<EK, CGAL::Polyhedron_items_with_id_3>;
@@ -28,15 +32,21 @@ ConvexHullSimplification::ConvexHullSimplification(
     const double t0 = igl::get_seconds();
     auto primal_points = point_list<EK>(V);
     EPolyhedron primal;
+    //printf("primal points: %d\n", (int)primal_points.size());
     CGAL::convex_hull_3(primal_points.begin(), primal_points.end(), primal);
+    //printf("primal facets: %d\n", (int)primal.size_of_facets());
     stats_.t_primal_hull = igl::get_seconds() - t0;
 
     // --- Dual hull (Chebyshev center + dual points + dedup + convex_hull_3) ---
     const double t1 = igl::get_seconds();
-    const double primal_squared_area_tol = 1e-15;
+    const auto bb = CGAL::bounding_box(primal_points.begin(), primal_points.end());
+    const double bbd_sqr_len = CGAL::squared_distance(bb.min(), bb.max());
+    const double primal_squared_area_tol = 1e-15 * bbd_sqr_len * bbd_sqr_len;
+    //printf("primal squared area tol: %g\n", primal_squared_area_tol);
     x0_exact_ = polyhedron_chebyshev_center(primal, primal_squared_area_tol);
 
     auto dual_points_exact = dual_points_list(primal, primal_squared_area_tol, x0_exact_);
+    //printf("Exact dual points: %d\n", (int)dual_points_exact.size());
     auto dV_exact = point_matrix<EK>(dual_points_exact);
 
     Eigen::Matrix<double,Eigen::Dynamic,3,Eigen::RowMajor> dV;
@@ -47,6 +57,7 @@ ConvexHullSimplification::ConvexHullSimplification(
         Eigen::Matrix<double,Eigen::Dynamic,3,Eigen::RowMajor>(dV),
         1e-14, dV, _1, _2);
     }
+    //printf("Deduplicated dual points: %d\n", (int)dV.rows());
 
     {
       auto dpts = point_list<IK>(dV);
@@ -54,6 +65,7 @@ ConvexHullSimplification::ConvexHullSimplification(
     }
     stats_.t_dual_hull = igl::get_seconds() - t1;
   }
+  //printf("dual vertices: %d\n", (int)dual_.size_of_vertices());
 
   // Assign contiguous vertex ids
   {
@@ -74,15 +86,31 @@ ConvexHullSimplification::ConvexHullSimplification(
     const double t0 = igl::get_seconds();
     const int nv = dual_.size_of_vertices();
     full_records_.resize(nv);
+    pop_ids_.reserve(nv);
     for(auto v = dual_.vertices_begin(); v != dual_.vertices_end(); ++v)
     {
-      auto [cost, record] = measure_vertex_erasure(dual_, v, max_degree_for_flips_);
+      if(v == nullptr)
+      {
+        assert(false);
+        continue;
+      }
+      if(v->halfedge() == nullptr)
+      {
+        // 
+#ifndef NDEBUG
+        printf("Warning: vertex %d has null halfedge; skipping\n", v->id());
+        printf("  %g,%g,%g\n", v->point().x(), v->point().y(), v->point().z());
+#endif
+        continue;
+      }
+      auto [cost, record] = measure_vertex_erasure(dual_, v, max_degree_for_flips_, cost_function_);
       const int vid = v->id();
       full_records_[vid] = {cost, 0, v, record};
       Q_.push({cost, vid, 0});
     }
     stats_.t_queue_init = igl::get_seconds() - t0;
   }
+  //printf("----------------------------------------------\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -104,11 +132,21 @@ bool ConvexHullSimplification::step()
   auto [cost, id, visit] = Q_.top();
   Q_.pop();
 
+
+
   if(cost == std::numeric_limits<Scalar>::infinity()) return false;
 
   auto v = full_records_[id].vertex;
   const auto & record = full_records_[id].record;
   const auto neighbors = collect_neighbors(v);
+  pop_ids_.push_back(id);
+
+//#warning "debugging"
+//  {
+//    printf("popping vertex %d with cost %g\n", id, cost);
+//    auto [debug_cost, debug_record] = measure_vertex_erasure(dual_, v, max_degree_for_flips_, cost_function_);
+//  }
+
 
   erase_vertex_and_clip_ears(dual_, v, record.start_vertex_id, record.path);
 
@@ -118,7 +156,7 @@ bool ConvexHullSimplification::step()
   for(const auto & n : neighbors)
   {
     const int nid = n->id();
-    auto [ncost, nrecord] = measure_vertex_erasure(dual_, n, max_degree_for_flips_);
+    auto [ncost, nrecord] = measure_vertex_erasure(dual_, n, max_degree_for_flips_, cost_function_);
     full_records_[nid].cost   = ncost;
     full_records_[nid].record = nrecord;
     full_records_[nid].visit++;
@@ -275,6 +313,65 @@ ConvexHullSimplification::get_primal_mesh()
 }
 
 // ---------------------------------------------------------------------------
+// get_dual_mesh(): extract dual as a triangle (V, F) with remapped indices
+// ---------------------------------------------------------------------------
+
+std::pair<Eigen::MatrixXd, Eigen::MatrixXi>
+ConvexHullSimplification::get_dual_mesh() const
+{
+  const int nv = num_dual_vertices();
+  Eigen::MatrixXd V(nv, 3);
+  std::vector<int> id_to_idx(full_records_.size(), -1);
+  {
+    int vi = 0;
+    for(auto v = dual_.vertices_begin(); v != dual_.vertices_end(); ++v)
+    {
+      const int id = static_cast<int>(v->id());
+      id_to_idx[id] = vi;
+      V.row(vi) << v->point().x(), v->point().y(), v->point().z();
+      vi++;
+    }
+  }
+
+  assert(dual_.is_pure_triangle());
+  const int nf = static_cast<int>(dual_.size_of_facets());
+  Eigen::MatrixXi F(nf, 3);
+  {
+    int fi = 0;
+    for(auto f = dual_.facets_begin(); f != dual_.facets_end(); ++f)
+    {
+      auto h = f->halfedge();
+      F.row(fi++) <<
+        id_to_idx[h->vertex()->id()],
+        id_to_idx[h->next()->vertex()->id()],
+        id_to_idx[h->next()->next()->vertex()->id()];
+    }
+  }
+  return {V, F};
+}
+
+Eigen::VectorXd ConvexHullSimplification::popped_dual_vertex_costs() const
+{
+  Eigen::VectorXd costs(full_records_.size());
+  for(size_t i = 0; i < full_records_.size(); ++i)
+  {
+    costs(i) = full_records_[i].cost;
+  }
+  for(auto v = dual_.vertices_begin(); v != dual_.vertices_end(); ++v)
+  {
+    const int vid = static_cast<int>(v->id());
+    costs(vid) = std::numeric_limits<Scalar>::quiet_NaN();
+  }
+  return costs;
+}
+
+Eigen::VectorXi ConvexHullSimplification::popped_dual_vertex_ids() const
+{
+  return Eigen::VectorXi(Eigen::Map<const Eigen::VectorXi>(pop_ids_.data(), pop_ids_.size()));
+}
+
+
+// ---------------------------------------------------------------------------
 // stats()
 // ---------------------------------------------------------------------------
 
@@ -292,9 +389,10 @@ simplify_convex_hull(
   const Eigen::MatrixXd & V,
   const Eigen::MatrixXi & F,
   int target_num_dual_vertices,
-  int max_degree_for_flips)
+  int max_degree_for_flips,
+  CostFunction cost_function)
 {
-  ConvexHullSimplification chs(V, F, max_degree_for_flips);
+  ConvexHullSimplification chs(V, F, max_degree_for_flips, cost_function);
   chs.simplify_to(target_num_dual_vertices);
   return chs.get_primal_mesh();
 }
