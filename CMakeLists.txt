@@ -46,8 +46,6 @@ endif()
 #
 add_library(progressive_convex_hull_simplification STATIC
   chebyshev_center.cpp
-  primal_volume_subtended.cpp
-  primal_area_change.cpp
   primal_change.cpp
   vertex_erasure.cpp
   convex_hull_simplification.cpp

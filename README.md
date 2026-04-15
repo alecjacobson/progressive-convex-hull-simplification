@@ -6,7 +6,7 @@
 
 Given a 3D mesh, produces a sequence of progressively simpler convex hulls that are guaranteed to strictly contain the input at every step (conservative / exterior simplification).
 
-The key idea is to work in the *dual* of the convex hull. Removing a vertex from the dual corresponds to removing a halfspace from the primal hull's H-representation — i.e., eliminating one face constraint and slightly enlarging the hull. Dual vertices are removed greedily in order of the primal volume added (analogous to quadric-error simplification for triangle meshes).
+The key idea is to work in the *dual* of the convex hull. Removing a vertex from the dual corresponds to removing a halfspace from the primal hull's H-representation — i.e., eliminating one face constraint and slightly enlarging the hull. Dual vertices are removed greedily in order of a per-vertex cost (primal volume added, or surface area change), analogous to quadric-error simplification for triangle meshes.
 
 ## Build
 
@@ -38,12 +38,18 @@ Defaults to an icosahedron if no mesh is given.
 | Option | Description |
 |---|---|
 | `--target N` | Simplify to N dual vertices / halfspaces (default: 18) |
+| `--cost-function F` | Cost metric: `volume` or `area` (default: `volume`) |
 | `--primal-output file.ply` | Write simplified hull as a polygon PLY (default: `<stem>-primal.ply`) |
 | `--dual-output file` | Write simplified dual as a triangle mesh in any format igl supports (default: `<stem>-dual.ply`) |
-| `--interactive` | Open a viewer (see below; requires `PCHS_INTERACTIVE=ON` build) |
+| `--primal-initial file.ply` | Write the initial (unsimplified) primal hull |
+| `--dual-initial file` | Write the initial (unsimplified) dual hull |
+| `--costs [file.dmat]` | Write per-vertex removal costs; NaN for surviving vertices (default: `<stem>-costs.dmat`) |
+| `--popped-ids [file.dmat]` | Write vertex removal order (default: `<stem>-popped-ids.dmat`) |
 | `--stats` | Print per-phase timing after simplification |
+| `--interactive` | Open a viewer (see below; requires `PCHS_INTERACTIVE=ON` build) |
+| `--help`, `-h` | Print usage |
 
-In non-interactive mode the primal (polygon mesh) and dual (triangle mesh) outputs are written to files. Default filenames are derived from the input filename stem, e.g. `Actaeon.ply` → `Actaeon-primal.ply` and `Actaeon-dual.ply`.
+Default output filenames are derived from the input stem, e.g. `Actaeon.ply` → `Actaeon-primal.ply`, `Actaeon-dual.ply`, `Actaeon-costs.dmat`, etc.
 
 ### Interactive viewer
 
@@ -51,7 +57,13 @@ In non-interactive mode the primal (polygon mesh) and dual (triangle mesh) outpu
 ./build/pchs --interactive --target 18 Actaeon.ply
 ```
 
-Opens a [polyscope](https://polyscope.run) window showing the input mesh (with ambient occlusion, computed in the background) and the current simplified hull (transparent, colored by face normals or graph coloring). Controls are in the left panel under **Hull Simplification**: step one vertex at a time, animate to the target count, adjust hull transparency, switch coloring mode, or reset to the full hull.
+Opens a [polyscope](https://polyscope.run) window showing the input mesh (ambient occlusion computed in the background) and the current simplified hull (transparent, colored by face normals or graph coloring). Controls are in the left panel under **Hull Simplification**:
+
+- **Target** / **Animate to target** / **Step** / **Go to target** — drive simplification one step at a time or animate to the target count.
+- **Cost function** — switch between `Volume` and `Area` cost metrics; switching resets to the full hull and re-simplifies to the current vertex count.
+- **Hull alpha** — adjust hull transparency.
+- **Coloring** — graph coloring or normal pseudocolor.
+- **Reset** — rebuild from the full hull.
 
 ## Algorithm sketch
 
@@ -59,7 +71,7 @@ Opens a [polyscope](https://polyscope.run) window showing the input mesh (with a
 2. Find the Chebyshev center of the primal halfspaces via a small linear program (SDLP).
 3. Map each non-(nearly-)degenerate primal face to a dual vertex via the polarity transform about the Chebyshev center.
 4. Compute the convex hull of the dual points (CGAL).
-5. For each dual vertex, measure the cost of removing it and re-triangulating convexly locally: the primal volume that would be added to the hull (`primal_volume_subtended`).
+5. For each dual vertex, measure the cost of removing it and re-triangulating the hole convexly: either the primal volume subtended or the change in primal surface area.
 6. Maintain a lazy-deletion min-heap. Repeatedly pop the cheapest vertex, erase it from the dual (retriangulating the resulting hole convexly), and update neighbors' costs.
 7. Convert the simplified dual back to a primal polygon mesh.
 
@@ -71,6 +83,7 @@ The core logic is in `ConvexHullSimplification` (`convex_hull_simplification.h`)
 ConvexHullSimplification chs(V, F);   // build primal hull, dual, init queue
 chs.simplify_to(18);                  // greedily simplify to 18 dual vertices
 auto [pV, pPI, pPC] = chs.get_primal_mesh();  // get current hull as polygon mesh
+auto [dV, dF]       = chs.get_dual_mesh();    // get current dual as triangle mesh
 ```
 
 For step-by-step control:
@@ -78,8 +91,16 @@ For step-by-step control:
 ```cpp
 while(chs.step()) { ... }             // one greedy removal per call
 chs.num_dual_vertices();              // current vertex count
+chs.popped_dual_vertex_costs();       // VectorXd, NaN for surviving vertices
+chs.popped_dual_vertex_ids();         // removal order
 chs.stats();                          // timing breakdown (t_primal_hull, t_dual_hull,
                                       //   t_queue_init, t_last_simplify)
+```
+
+The cost function defaults to `CostFunction::PRIMAL_VOLUME`; pass `CostFunction::PRIMAL_AREA_CHANGE` to use surface area instead:
+
+```cpp
+ConvexHullSimplification chs(V, F, /*max_degree_for_flips=*/100, CostFunction::PRIMAL_AREA_CHANGE);
 ```
 
 `MAX_DEGREE_FOR_FLIPS` (env var, default 100) controls the vertex-degree threshold above which the convex-hull-based one-ring triangulation is used instead of the flip-based method.
@@ -90,14 +111,13 @@ After building with `-DPCHS_PYTHON_BINDINGS=ON`, add the build directory to `PYT
 
 ```python
 import pchs
-import numpy as np
 import igl
 
-V, F = igl.icosahedron()  # or load your own mesh with igl.read_triangle_mesh()
+V, F = igl.read_triangle_mesh("mesh.obj")
 
 chs = pchs.ConvexHullSimplification(V, F,
     max_degree_for_flips=100,
-    cost_function=pchs.CostFunction.volume)
+    cost_function=pchs.CostFunction.volume)  # or pchs.CostFunction.area
 
 chs.simplify_to(18)
 
