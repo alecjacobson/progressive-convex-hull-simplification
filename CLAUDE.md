@@ -29,7 +29,7 @@ The executable is `pchs`. Run it with an optional mesh argument (PLY, OBJ, etc.)
 
 - **libigl**: geometry processing (mesh I/O, linear programming, min-heap, etc.)
 - **CGAL** (via libigl copyleft): exact/inexact kernels, convex hull, polyhedron operations
-- **SDLP** (`alecjacobson/SDLP`): small-dimension linear programming used in `chebyshev_center`
+- **SDLP**: small-dimension linear programming used in `chebyshev_center`
 - **Eigen**: matrix math
 
 ## Architecture
