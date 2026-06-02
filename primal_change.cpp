@@ -16,6 +16,7 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
   std::vector<Point> all_primal_vertices;
   std::vector<bool> all_already;
   int num_boundary_halfedges = 0;
+  typename Polyhedron::Halfedge_handle h0;
   {
     int id = 0;
     // First label all of the facets
@@ -29,18 +30,31 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
     {
       if(h->is_border()) break;
     }
-    const auto h0 = h;
+    const auto h0_opposite = h;
     do
     {
       h->id() = id++;
       num_boundary_halfedges++;
       h = h->next();
-    }while(h != h0);
+    }while(h != h0_opposite);
+    h0 = h0_opposite->opposite();
     all_primal_vertices.resize(id);
     all_already.resize(id, false);
   }
 
-  const auto dual_triangle_to_point = [&all_primal_vertices,&all_already](
+  const auto dual_triangle_to_point_uncached = [](
+      const Point & A, const Point & B, const Point & C)
+  {
+    // N = (A-B)×(C-B)
+    const auto n = CGAL::cross_product(A - B, C - B);
+    const auto bc = CGAL::centroid(A, B, C) - CGAL::ORIGIN;
+    const auto beta = CGAL::scalar_product(n, bc);
+    // n / beta
+    const auto p = CGAL::ORIGIN + (n / beta);
+    return p;
+  };
+
+  const auto dual_triangle_to_point = [&all_primal_vertices,&all_already,&dual_triangle_to_point_uncached](
       const int id,
       const Point & A, const Point & B, const Point & C)
   {
@@ -48,12 +62,7 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
     {
       return all_primal_vertices[id];
     }
-    // N = (A-B)×(C-B)
-    const auto n = CGAL::cross_product(A - B, C - B);
-    const auto bc = CGAL::centroid(A, B, C) - CGAL::ORIGIN;
-    const auto beta = CGAL::scalar_product(n, bc);
-    // n / beta
-    const auto p = CGAL::ORIGIN + (n / beta);
+    const auto p = dual_triangle_to_point_uncached(A,B,C);
     all_primal_vertices[id] = p;
     all_already[id] = true;
     return p;
@@ -132,6 +141,7 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
     const auto n_v = polygon_vector_area(primal_vertices);
     switch(cost_function)
     {
+      case CostFunction::PRIMAL_MEAN_WIDTH: { /* handled elsewhere */ break; }
       case CostFunction::PRIMAL_VOLUME:
       {
         const auto bc_v = centroid(primal_vertices);
@@ -139,7 +149,7 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
         contribution_bottom += CGAL::scalar_product(n_v, bc_v);
         break;
       }
-      case CostFunction::PRIMAL_AREA_CHANGE:
+      case CostFunction::PRIMAL_AREA:
       {
         static_assert(!std::is_same_v<Scalar, CGAL::Epeck::FT>, "Scalar must not be Epeck");
         contribution_bottom += CGAL::sqrt(n_v.squared_length()) * 0.5;
@@ -158,7 +168,7 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
       if(h->is_border()) break;
     }
     //printf("h: %d,%d\n", h->vertex()->id(), h->opposite()->vertex()->id());
-    const auto h0 = h;
+    const auto h1 = h;
     do
     {
       //printf("h: %d,%d | %s\n",
@@ -174,17 +184,18 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
       //printf("%d: %g,%g,%g\n",h->id(), p.x(), p.y(), p.z());
       primal_vertices.push_back(h->id());
       h = h->next();
-    }while(h != h0);
+    }while(h != h1);
     const auto n = polygon_vector_area(primal_vertices);
     switch(cost_function)
     {
+      case CostFunction::PRIMAL_MEAN_WIDTH: { /* handled elsewhere */ break; }
       case CostFunction::PRIMAL_VOLUME:
       {
         const auto bc = centroid(primal_vertices);
         contribution_top += CGAL::scalar_product(n, bc);
         break;
       }
-      case CostFunction::PRIMAL_AREA_CHANGE:
+      case CostFunction::PRIMAL_AREA:
       {
         contribution_top += CGAL::sqrt(n.squared_length()) * 0.5;
         break;
@@ -194,12 +205,13 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
   Scalar cost;
   switch(cost_function)
   {
+    case CostFunction::PRIMAL_MEAN_WIDTH: { /* handled elsewhere */ break; }
     case CostFunction::PRIMAL_VOLUME:
     {
       cost = (contribution_top - contribution_bottom)/Scalar(6);
       break;
     }
-    case CostFunction::PRIMAL_AREA_CHANGE:
+    case CostFunction::PRIMAL_AREA:
     {
       cost = contribution_bottom - contribution_top;
       break;
@@ -225,6 +237,136 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
   {
     // numerically contains origin (otherwise cost will be nuts)
     contains_origin = contains_origin || cost < -1e-15;
+    cost = (cost <= Scalar(0.0)) ? Scalar(0.0) : cost;
+  }
+
+  if(cost_function == CostFunction::PRIMAL_MEAN_WIDTH)
+  {
+    cost = 0;
+
+    const auto mean_width_contribution = [](
+        const auto & p_ni, const auto & p_nj, const auto & p_pu, const auto & p_pv)
+    {
+      // edge length between u and v
+      const auto edge_vec = p_pu - p_pv;
+      const auto edge_len = CGAL::sqrt(edge_vec.squared_length());
+      if(edge_len == 0.0)
+      {
+        return Scalar(0.0);
+      }
+      const auto edge_dir = edge_vec / edge_len;
+      //// dihedral angle between faces i and j
+      const auto dihedral_angle = atan2(
+          CGAL::scalar_product(CGAL::cross_product(p_nj, p_ni), edge_dir),
+          CGAL::scalar_product(p_ni, p_nj));
+      return edge_len * dihedral_angle;
+    };
+
+    const auto mean_width_contribution_internal_edge_to_p0 = 
+      [&mean_width_contribution,&dual_triangle_to_point_uncached,&p0](
+        const auto & h)
+    {
+      //  a
+      //  | \
+      //  ↓h \
+      //  |   \
+      //  b----p₀
+      //  |   /
+      //  ↓h_next
+      //  | /
+      //  c
+      const auto h_next = h->opposite()->prev()->opposite();
+      const auto a = h->opposite()->vertex()->point();
+      const auto b = h->vertex()->point();
+      const auto c = h_next->vertex()->point();
+      const auto p_ni = (p0 - CGAL::ORIGIN);
+      const auto p_nj = (b - CGAL::ORIGIN);
+      const auto p_pu = dual_triangle_to_point_uncached( a,b,p0);
+      const auto p_pv = dual_triangle_to_point_uncached( b,c,p0);
+      return mean_width_contribution(p_ni, p_nj, p_pu, p_pv);
+    };
+
+    const auto mean_width_contribution_internal_edge = [&mean_width_contribution,&dual_triangle_to_point_uncached](
+        const auto & e)
+    {
+      assert(!e->is_border() && !e->opposite()->is_border() && "edge should be internal");
+      const auto d_pi = e->vertex()->point();
+      const auto d_pj = e->opposite()->vertex()->point();
+      //const auto normalize = [](const auto & v)
+      //{
+      //  const auto len = CGAL::sqrt(v.squared_length());
+      //  return (len > Scalar(0.0)) ? (v / len) : CGAL::NULL_VECTOR;
+      //};
+      // primal face normals (unnormalized if we used atan2 in
+      // mean_width_contribution)
+      const auto p_ni = (d_pi - CGAL::ORIGIN);
+      const auto p_nj = (d_pj - CGAL::ORIGIN);
+      // (ij) between dual vertices i and j. Lies between dual faces u and v
+      // which are always triangles and correspond to primal vertices u and v.
+      const auto p_pu = 
+          dual_triangle_to_point_uncached(
+              e->vertex()->point(),
+              e->next()->vertex()->point(),
+              e->next()->next()->vertex()->point());
+      const auto p_pv = 
+          dual_triangle_to_point_uncached(
+              e->opposite()->vertex()->point(),
+              e->opposite()->next()->vertex()->point(),
+              e->opposite()->next()->next()->vertex()->point());
+      return mean_width_contribution(p_ni, p_nj, p_pu, p_pv);
+    };
+
+    for (auto e = poly.edges_begin(); e != poly.edges_end(); ++e)
+    {
+      if(e->is_border() || e->opposite()->is_border())
+      {
+        // skip border edges. We'll handle those separately.
+        continue;
+      }
+      // internal edge from dual vertex i to j. This corresponds to primal faces
+      // i and j. Between which there is a dihedral angle θij
+      const auto contrib = mean_width_contribution_internal_edge(e);
+      cost += contrib;
+    }
+
+    // "rim" contributions for both. "spoke" contributions for old.
+    assert(h0->opposite()->is_border() && "h0 should be opposite a border half-edge");
+    auto h = h0;
+    do
+    {
+      assert(h->vertex()->id() == g->vertex()->id() && "h and g should point to the same vertex");
+      assert(h->opposite()->vertex()->id() == g->opposite()->vertex()->id() && "h and g should point from the same vertex");
+      const auto d_pi = h->vertex()->point();
+      const auto d_pj = h->opposite()->vertex()->point();
+      const auto p_ni = (d_pi - CGAL::ORIGIN);
+      const auto p_nj = (d_pj - CGAL::ORIGIN);
+
+      const auto p_pu_new = 
+          dual_triangle_to_point_uncached(
+              h->vertex()->point(),
+              h->next()->vertex()->point(),
+              h->next()->next()->vertex()->point());
+      const auto p_pu_old = 
+          dual_triangle_to_point_uncached(
+              h->vertex()->point(),
+              p0,
+              h->next()->next()->vertex()->point());
+
+      // We need to use the half-edge on the original polyhedron to get the
+      // opposite facet
+      assert(h->opposite()->is_border());
+      const auto old_spoke = mean_width_contribution_internal_edge_to_p0(h);
+      const auto flap_change = mean_width_contribution(p_ni, p_nj, p_pu_new, p_pu_old);
+      cost += flap_change - old_spoke;
+      h = h->opposite()->prev()->opposite();
+    }while(h != h0);
+    assert(h == h0);
+    cost /= (4.0 * std::acos(-1.0));
+
+    if(cost < Scalar(0.0))
+    {
+      assert(cost >= Scalar(-1));
+    }
     cost = (cost <= Scalar(0.0)) ? Scalar(0.0) : cost;
   }
   

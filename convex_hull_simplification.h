@@ -83,6 +83,10 @@ public:
   };
   Stats stats() const;
 
+  // Mean width of the current primal hull: (1/4π) Σ ℓ_e θ_e over primal edges,
+  // where θ_e is the exterior dihedral angle. Recomputed from scratch each call.
+  double mean_width() const;
+
 private:
   struct FullRecord
   {

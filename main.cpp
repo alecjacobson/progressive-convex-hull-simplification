@@ -104,7 +104,8 @@ int main(int argc, char *argv[])
         "Defaults to an icosahedron if no mesh is given.\n"
         "\n"
         "Options:\n"
-        "  --target N              Simplify to N dual vertices / halfspaces (default: 18)\n"
+        "  --target N              Simplify to N dual vertices / halfspaces (default: 18);\n"
+        "                          if N < 0, subtract from the initial count (e.g. -1 removes one face)\n"
         "  --cost-function F       Cost metric: 'volume' or 'area' (default: volume)\n"
         "  --primal-output file    Write simplified hull as a polygon PLY\n"
         "  --dual-output file      Write simplified dual as a triangle mesh\n"
@@ -150,8 +151,9 @@ int main(int argc, char *argv[])
     {
       const std::string cf(argv[++i]);
       if(cf == "volume")     cost_function = CostFunction::PRIMAL_VOLUME;
-      else if(cf == "area")  cost_function = CostFunction::PRIMAL_AREA_CHANGE;
-      else { fprintf(stderr, "error: unknown cost function '%s' (use 'volume' or 'area')\n", cf.c_str()); return 1; }
+      else if(cf == "area")  cost_function = CostFunction::PRIMAL_AREA;
+      else if(cf == "mean-width")  cost_function = CostFunction::PRIMAL_MEAN_WIDTH;
+      else { fprintf(stderr, "error: unknown cost function '%s' (use 'volume', 'area' or 'mean-width')\n", cf.c_str()); return 1; }
     }
     else                       { mesh_file = argv[i]; }
   }
@@ -203,6 +205,7 @@ int main(int argc, char *argv[])
   if(interactive)
   {
     auto chs = std::make_unique<ConvexHullSimplification>(V, F, max_degree_for_flips, cost_function);
+    if(target < 0) target = chs->num_dual_vertices() + target;
 
     polyscope::init();
     polyscope::options::programName = "Progressive Convex Hull Simplification";
@@ -237,8 +240,9 @@ int main(int argc, char *argv[])
 
     float hull_alpha = 0.85f;  // opacity: 1=opaque, 0=transparent
     int   color_mode = 1;      // 0 = graph coloring, 1 = normal pseudocolor
-    // cost_function_idx mirrors cost_function: 0=volume, 1=area
-    int cost_function_idx = (cost_function == CostFunction::PRIMAL_AREA_CHANGE) ? 1 : 0;
+    // cost_function_idx mirrors cost_function: 0=volume, 1=area, 2=mean-width
+    int cost_function_idx = (cost_function == CostFunction::PRIMAL_AREA) ? 1
+                          : (cost_function == CostFunction::PRIMAL_MEAN_WIDTH)  ? 2 : 0;
 
     // Helper: rebuild the simplified-hull mesh and polygon-edge curve network
     // in polyscope from the current chs state.
@@ -385,15 +389,15 @@ int main(int argc, char *argv[])
           if(auto* m = polyscope::getSurfaceMesh("simplified hull"))
             m->setTransparency(hull_alpha);
         {
-          static const char* cf_modes[] = {"Volume", "Area"};
+          static const char* cf_modes[] = {"Volume", "Area", "Mean Width"};
           ImGui::SetNextItemWidth(120.0f);
-          if(ImGui::Combo("Cost function", &cost_function_idx, cf_modes, 2))
+          if(ImGui::Combo("Cost function", &cost_function_idx, cf_modes, 3))
           {
             animate = false;
             const int current_n = chs->num_dual_vertices();
-            cost_function = (cost_function_idx == 1)
-              ? CostFunction::PRIMAL_AREA_CHANGE
-              : CostFunction::PRIMAL_VOLUME;
+            cost_function = (cost_function_idx == 1) ? CostFunction::PRIMAL_AREA
+                          : (cost_function_idx == 2) ? CostFunction::PRIMAL_MEAN_WIDTH
+                          :                            CostFunction::PRIMAL_VOLUME;
             chs = std::make_unique<ConvexHullSimplification>(V, F, max_degree_for_flips, cost_function);
             chs->simplify_to(current_n);
             update_hull();
@@ -464,10 +468,12 @@ int main(int argc, char *argv[])
 
   // --- Non-interactive mode ---
   ConvexHullSimplification chs(V, F, max_degree_for_flips, cost_function);
+  if(target < 0) target = chs.num_dual_vertices() + target;
 
   // Initial outputs (before any simplification).
   double area_initial = 0.0;
   double volume_initial = 0.0;
+  double mean_width_initial = 0.0;
   const auto primal_area_and_volume = [](auto & chs) -> std::pair<double, double>
   {
     auto [pV, pPI, pPC] = chs.get_primal_mesh();
@@ -487,6 +493,7 @@ int main(int argc, char *argv[])
   if(print_stats)
   {
     std::tie(area_initial, volume_initial) = primal_area_and_volume(chs);
+    mean_width_initial = chs.mean_width();
   }
 
   if(primal_initial)
@@ -506,20 +513,21 @@ int main(int argc, char *argv[])
   if(print_stats)
   {
     auto [area_final, volume_final] = primal_area_and_volume(chs);
+    const double mean_width_final = chs.mean_width();
     const Eigen::VectorXd costs = chs.popped_dual_vertex_costs();
     const Eigen::VectorXi ids = chs.popped_dual_vertex_ids();
     //printf("last id: %d\n",ids(ids.size()-1));
 
     const auto s = chs.stats();
-    printf("primal hull:  %8.4g s\n", s.t_primal_hull);
-    printf("dual hull:    %8.4g s\n", s.t_dual_hull);
-    printf("queue init:   %8.4g s\n", s.t_queue_init);
-    printf("simplify_to:  %8.4g s\n", s.t_last_simplify);
-    printf("total:        %8.4g s\n",
+    printf("primal hull:   %8.4g s\n", s.t_primal_hull);
+    printf("dual hull:     %8.4g s\n", s.t_dual_hull);
+    printf("queue init:    %8.4g s\n", s.t_queue_init);
+    printf("simplify_to:   %8.4g s\n", s.t_last_simplify);
+    printf("total:         %8.4g s\n",
       s.t_primal_hull + s.t_dual_hull + s.t_queue_init + s.t_last_simplify);
     printf("initial area:  %8.4g\n", area_initial);
     printf("final area:    %8.4g\n", area_final);
-    if(cost_function == CostFunction::PRIMAL_AREA_CHANGE)
+    if(cost_function == CostFunction::PRIMAL_AREA)
     {
       printf("∫ final area:  %8.4g\n", area_initial + costs(ids).sum());
     }
@@ -531,6 +539,13 @@ int main(int argc, char *argv[])
       printf("∫ vol change:  %8.4g\n", volume_initial + costs(ids).sum());
     }
     printf("f/i volume:    %8.4g\n", volume_final / volume_initial);
+    printf("initial mw:    %8.4g\n", mean_width_initial);
+    printf("final mw:      %8.4g\n", mean_width_final);
+    if(cost_function == CostFunction::PRIMAL_MEAN_WIDTH)
+    {
+      printf("∫ mw change:   %8.4g\n", mean_width_initial + costs(ids).sum());
+    }
+    printf("f/i mw:        %8.4g\n", mean_width_final / mean_width_initial);
   }
 
   if(write_costs)

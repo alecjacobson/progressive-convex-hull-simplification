@@ -9,7 +9,9 @@
 #include <CGAL/bounding_box.h>
 
 
+#include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <limits>
 
 // ---------------------------------------------------------------------------
@@ -110,7 +112,6 @@ ConvexHullSimplification::ConvexHullSimplification(
     }
     stats_.t_queue_init = igl::get_seconds() - t0;
   }
-  //printf("----------------------------------------------\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +120,8 @@ ConvexHullSimplification::ConvexHullSimplification(
 
 bool ConvexHullSimplification::step()
 {
+  //printf("\n\n\n\n\n\n\n--------------------------------------\n");
+  //printf("mean_width (before): %g  (dual vertices: %d)\n", mean_width(), num_dual_vertices());
   // Drain stale entries
   while(!Q_.empty())
   {
@@ -142,13 +145,15 @@ bool ConvexHullSimplification::step()
   pop_ids_.push_back(id);
 
 //#warning "debugging"
-//  {
-//    printf("popping vertex %d with cost %g\n", id, cost);
-//    auto [debug_cost, debug_record] = measure_vertex_erasure(dual_, v, max_degree_for_flips_, cost_function_);
-//  }
+  {
+    //printf("popping vertex %d with cost %g\n", id, cost);
+    auto [debug_cost, debug_record] = measure_vertex_erasure(dual_, v, max_degree_for_flips_, cost_function_);
+    //printf("  verified cost: %g\n", debug_cost);
+  }
 
 
   erase_vertex_and_clip_ears(dual_, v, record.start_vertex_id, record.path);
+  //printf("mean_width (after): %g  (dual vertices: %d)\n", mean_width(), num_dual_vertices());
 
   assert(dual_.is_pure_triangle());
   assert(dual_.is_closed());
@@ -378,6 +383,71 @@ Eigen::VectorXi ConvexHullSimplification::popped_dual_vertex_ids() const
 ConvexHullSimplification::Stats ConvexHullSimplification::stats() const
 {
   return stats_;
+}
+
+// ---------------------------------------------------------------------------
+// mean_width(): (1/4π) Σ ℓ_e θ_e over all primal edges
+// ---------------------------------------------------------------------------
+
+double ConvexHullSimplification::mean_width() const
+{
+  // Chebyshev center (EK == IK here, both are inexact constructions kernel)
+  const double x0x = CGAL::to_double(x0_exact_.x());
+  const double x0y = CGAL::to_double(x0_exact_.y());
+  const double x0z = CGAL::to_double(x0_exact_.z());
+
+  // For a dual triangular face, return the corresponding primal vertex position
+  // via the inverse polarity map: p = x0 + n_face / (n_face · centroid).
+  const auto primal_vertex = [&](auto f) -> Eigen::Vector3d
+  {
+    auto h = f->halfedge();
+    const auto & A = h->vertex()->point();
+    const auto & B = h->next()->vertex()->point();
+    const auto & C = h->next()->next()->vertex()->point();
+    const auto n  = CGAL::cross_product(B - A, C - A);
+    const auto bc = ((A - CGAL::ORIGIN) + (B - CGAL::ORIGIN) + (C - CGAL::ORIGIN)) / IK::FT(3);
+    const double beta = CGAL::to_double(n * bc);
+    return {x0x + CGAL::to_double(n.x()) / beta,
+            x0y + CGAL::to_double(n.y()) / beta,
+            x0z + CGAL::to_double(n.z()) / beta};
+  };
+
+  double sum = 0.0;
+  for(auto e = dual_.edges_begin(); e != dual_.edges_end(); ++e)
+  {
+    // Dual vertex position ∝ outward primal face normal (dual point = n/|denom|, denom < 0)
+    const auto & p1 = e->vertex()->point();
+    const auto & p2 = e->opposite()->vertex()->point();
+    // These don't need to be normalized if we're using the atan2 version
+    const Eigen::Vector3d n1 = Eigen::Vector3d(
+      CGAL::to_double(p1.x()), CGAL::to_double(p1.y()), CGAL::to_double(p1.z()));
+    const Eigen::Vector3d n2 = Eigen::Vector3d(
+      CGAL::to_double(p2.x()), CGAL::to_double(p2.y()), CGAL::to_double(p2.z()));
+
+    // Dual faces give the two endpoints of the primal edge
+    const Eigen::Vector3d q0 = primal_vertex(e->facet());
+    const Eigen::Vector3d q1 = primal_vertex(e->opposite()->facet());
+
+    const Eigen::Vector3d edge_vec = q1 - q0;
+    const double len   = (q1 - q0).stableNorm();
+    if(len == 0.0)
+    {
+      continue;
+    }
+    const Eigen::Vector3d edge_dir = edge_vec / len;
+    //const double theta = std::acos(std::clamp(n1.dot(n2), -1.0, 1.0));
+    const double theta = std::atan2(
+      edge_dir.dot(n1.cross(n2)),
+      n1.dot(n2));
+    const auto contrib = len * theta;
+    //printf("%d,%d  %g\n",
+    //    std::min(static_cast<int>(e->vertex()->id()), static_cast<int>(e->opposite()->vertex()->id())),
+    //    std::max(static_cast<int>(e->vertex()->id()), static_cast<int>(e->opposite()->vertex()->id())),
+    //    contrib);
+    sum += contrib;
+  }
+
+  return sum / (4.0 * std::acos(-1.0));
 }
 
 // ---------------------------------------------------------------------------

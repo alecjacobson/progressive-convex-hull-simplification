@@ -15,7 +15,7 @@ NB_MODULE(pchs, m)
   // --- CostFunction enum ---
   nb::enum_<CostFunction>(m, "CostFunction")
     .value("volume", CostFunction::PRIMAL_VOLUME,     "Primal volume added per removal")
-    .value("area",   CostFunction::PRIMAL_AREA_CHANGE, "Change in primal surface area per removal")
+    .value("area",   CostFunction::PRIMAL_AREA, "Change in primal surface area per removal")
     .export_values();
 
   // --- Stats struct ---

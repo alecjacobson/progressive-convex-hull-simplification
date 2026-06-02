@@ -202,11 +202,12 @@ measure_vertex_erasure(
 
   
 
+  //printf("Computing cost for vertex %d\n", v->id());
   auto [cost,contains_origin] = primal_change(
     one_ring_copy,
     p,
     cost_function);
-  //printf("cost(%d): %g\n",v->id(),cost);
+    //printf("cost(%d): %g\n",v->id(),cost);
   //    if(v->id() == 10)
   //    {
   //      exit(1);
