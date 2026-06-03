@@ -154,7 +154,7 @@ datastructure. Using webchat llms effectively as a search engine on the CGAL
 documentation, I wrote the initial core of the `vertex_erasure`,
 `primal_change`, and `convex_hull_simplification` functions more or less
 manually (with tab-complete copilot stuff). When a very minimal version of this
-was working, I let Claude Code at it with adding visualization, flags, python
+was working, I let Claude Code at it with CMake build junk, adding visualization, flags, python
 bindings, and most of this readme file. I did not use coding agents of llms to
 write any of the paper text (beyond looking for typos or double-checking
 derivations).
