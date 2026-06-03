@@ -139,3 +139,29 @@ print(s.t_primal_hull, s.t_dual_hull, s.t_queue_init, s.t_last_simplify)
 pV, pPI, pPC = pchs.simplify_convex_hull(V, F, 18)
 ```
 
+## LLM use
+
+I wrote the original prototype of this algorithm in matlab without much input
+from llms or coding agents (probably copilot tab-complete helped a little bit).
+Then I wrote most of first draft of the paper. My thought was that Claude Code
+etc. would have no trouble taking the paper source and the matlab prototype and
+spitting out a C++ implementation. A few failed attempts and a lot of spent
+tokens later, I gave up doing it completely automatically. The llms were
+simultaneously immensely helpful parsing through CGAL's otherwise forboding
+documentation and templating and also terribly confused by how to build anything
+more complicated than simple loops over elements using CGAL's half-edge
+datastructure. Using webchat llms effectively as a search engine on the CGAL
+documentation, I wrote the initial core of the `vertex_erasure`,
+`primal_change`, and `convex_hull_simplification` functions more or less
+manually (with tab-complete copilot stuff). When a very minimal version of this
+was working, I let Claude Code at it with adding visualization, flags, python
+bindings, and most of this readme file. I did not use coding agents of llms to
+write any of the paper text (beyond looking for typos or double-checking
+derivations).
+
+I added the mean-width cost metric after the first round of reviews. Again, I
+thought that because the area and volume metrics were already in place this
+would be an easy fully automatic task for Claude Code. It burnt an entire
+session quota and output nothing. So, I ended up writing that manually (with
+copilot tab-complete), and then Claude code cleaned up the flags and
+visualization code to expose the new cost metric.
