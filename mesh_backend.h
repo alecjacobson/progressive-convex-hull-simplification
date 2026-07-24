@@ -51,5 +51,42 @@ namespace mesh
 }
 
 #elif defined(PCHS_BACKEND_NATIVE)
-#  error "Native backend (Phase B/C) not wired up yet."
+
+#include "native_geom.h"
+#include "native_mesh.h"
+#include "native_hull.h"
+
+#include <algorithm>
+#include <vector>
+
+namespace mesh
+{
+  using Kernel     = nat::Kernel;
+  using Point3     = nat::Point3;
+  using Polyhedron = nat::Mesh;
+
+  template <class InputIt, class Poly>
+  inline void convex_hull_3(InputIt begin, InputIt end, Poly & out)
+  {
+    out = nat::convex_hull_3(std::vector<nat::Point3>(begin, end));
+  }
+
+  template <class InputIt>
+  inline nat::Bbox bounding_box(InputIt begin, InputIt end)
+  {
+    nat::Bbox bb;
+    bool first = true;
+    for(InputIt it = begin; it != end; ++it)
+    {
+      const nat::Point3 p = *it;
+      if(first) { bb.mn = p; bb.mx = p; first = false; continue; }
+      bb.mn = nat::Point3(std::min(bb.mn.x(), p.x()), std::min(bb.mn.y(), p.y()),
+                          std::min(bb.mn.z(), p.z()));
+      bb.mx = nat::Point3(std::max(bb.mx.x(), p.x()), std::max(bb.mx.y(), p.y()),
+                          std::max(bb.mx.z(), p.z()));
+    }
+    return bb;
+  }
+}
+
 #endif

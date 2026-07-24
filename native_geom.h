@@ -53,6 +53,23 @@ private:
   double x_, y_, z_;
 };
 
+// Kernel-like traits bundle (mirrors the CGAL kernel's nested types used by the
+// algorithm: Point_3, Vector_3, FT).
+struct Kernel
+{
+  using FT = double;
+  using Point_3 = Point3;
+  using Vector_3 = Vector3;
+};
+
+// Axis-aligned bounding box with CGAL-Iso_cuboid-like min()/max().
+struct Bbox
+{
+  Point3 mn, mx;
+  const Point3 & min() const { return mn; }
+  const Point3 & max() const { return mx; }
+};
+
 // Tag types mirroring CGAL::ORIGIN / CGAL::NULL_VECTOR.
 struct Origin_t {};
 struct Null_vector_t {};

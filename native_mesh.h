@@ -87,7 +87,7 @@ class Mesh
 public:
   using Point_3 = Point3;
   struct Traits { using FT = double; using Point_3 = Point3;
-                  using Oriented_side = Sign; };
+                  using Vector_3 = Vector3; using Oriented_side = Sign; };
 
   using Vertex_handle          = Handle<Elem::V>;
   using Vertex_const_handle    = Handle<Elem::V>;

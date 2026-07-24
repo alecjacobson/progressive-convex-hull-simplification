@@ -50,5 +50,29 @@ namespace geom
 }
 
 #elif defined(PCHS_BACKEND_NATIVE)
-#  error "Native geometry backend (Phase B/C) not wired up yet."
+
+#include "native_geom.h"
+
+namespace geom
+{
+  using nat::orientation;
+  using nat::cross_product;
+  using nat::scalar_product;
+  using nat::centroid;
+  using nat::squared_area;
+  using nat::squared_distance;
+  using nat::to_double;
+  using nat::sqrt;
+
+  using nat::ORIGIN;
+  using nat::NULL_VECTOR;
+
+  using nat::NEGATIVE;
+  using nat::ZERO;
+  using nat::POSITIVE;
+  using nat::ON_NEGATIVE_SIDE;
+  using nat::ON_ORIENTED_BOUNDARY;
+  using nat::ON_POSITIVE_SIDE;
+}
+
 #endif

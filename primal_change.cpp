@@ -70,7 +70,7 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
 
   const auto polygon_vector_area = [&all_primal_vertices](const std::vector<int> & vertices)
   {
-    using Vector = typename CGAL::Kernel_traits<Point>::Kernel::Vector_3;
+    using Vector = typename Polyhedron::Traits::Vector_3;
 
     Vector sum = geom::NULL_VECTOR;
 
