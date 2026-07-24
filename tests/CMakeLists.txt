@@ -17,11 +17,24 @@ target_compile_definitions(pchs_tests PRIVATE
 )
 target_compile_options(pchs_tests PRIVATE -Wno-format)
 
+# Native convex hull (qhull) — compiled into the test binary when enabled.
+if(PCHS_QHULL)
+  target_sources(pchs_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../native_hull.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_native_hull.cpp
+  )
+  target_link_libraries(pchs_tests PRIVATE pchs_qhull_r)
+  target_compile_definitions(pchs_tests PRIVATE PCHS_QHULL)
+endif()
+
 # One CTest entry per test tier so failures are localized.
 add_test(NAME unit.invariants COMMAND pchs_tests invariants_)
 add_test(NAME unit.components COMMAND pchs_tests comp_)
 add_test(NAME unit.native_geom COMMAND pchs_tests native_geom)
 add_test(NAME unit.native_mesh COMMAND pchs_tests native_mesh)
+if(PCHS_QHULL)
+  add_test(NAME unit.native_hull COMMAND pchs_tests native_hull)
+endif()
 
 # Golden regression on the icosahedron (byte-exact for the CGAL backend).
 add_test(NAME golden.icosahedron

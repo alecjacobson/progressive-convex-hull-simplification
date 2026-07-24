@@ -6,6 +6,7 @@ list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 option(PCHS_INTERACTIVE "Build the interactive polyscope viewer (requires polyscope + embree)" ON)
 option(PCHS_PYTHON_BINDINGS "Build Python bindings via nanobind" OFF)
 option(PCHS_TESTS "Build the test suite (CTest)" ON)
+option(PCHS_QHULL "Fetch qhull and build the native backend's convex hull" ON)
 
 include(dependencies)
 

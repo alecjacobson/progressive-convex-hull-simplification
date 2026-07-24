@@ -32,6 +32,24 @@ if(PCHS_INTERACTIVE)
   FetchContent_MakeAvailable(polyscope)
 endif()
 
+if(PCHS_QHULL)
+  # qhull for the native backend's convex hull. We only want the reentrant
+  # library; qhull's own CMakeLists pulls in apps + CTest smoketests, so we
+  # populate the source but build just src/libqhull_r/ ourselves (SOURCE_SUBDIR
+  # points at a dir with no CMakeLists so MakeAvailable skips add_subdirectory).
+  FetchContent_Declare(
+      qhull
+      GIT_REPOSITORY https://github.com/qhull/qhull.git
+      GIT_TAG        2020.2
+      SOURCE_SUBDIR  src/libqhull_r
+  )
+  FetchContent_MakeAvailable(qhull)
+  file(GLOB PCHS_QHULL_R_SRC ${qhull_SOURCE_DIR}/src/libqhull_r/*.c)
+  add_library(pchs_qhull_r STATIC ${PCHS_QHULL_R_SRC})
+  target_include_directories(pchs_qhull_r PUBLIC ${qhull_SOURCE_DIR}/src)
+  set_target_properties(pchs_qhull_r PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
+
 if(PCHS_PYTHON_BINDINGS)
   find_package(Python 3.8
     REQUIRED COMPONENTS Interpreter Development.Module
