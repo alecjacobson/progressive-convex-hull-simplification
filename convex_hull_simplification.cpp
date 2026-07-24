@@ -148,7 +148,7 @@ bool ConvexHullSimplification::step()
   }
 
 
-  erase_vertex_and_clip_ears(dual_, v, record.start_vertex_id, record.path);
+  erase_vertex_and_clip_ears(dual_, v, record);
   //printf("mean_width (after): %g  (dual vertices: %d)\n", mean_width(), num_dual_vertices());
 
   assert(dual_.is_pure_triangle());

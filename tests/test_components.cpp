@@ -348,7 +348,7 @@ TEST(comp_clip_ears_replay_matches_measurement)
 
   // Replay the recorded path on the actual dual.
   auto vh = v;
-  erase_vertex_and_clip_ears(dual, vh, record.start_vertex_id, record.path);
+  erase_vertex_and_clip_ears(dual, vh, record);
   CHECK(dual.is_pure_triangle());
   CHECK(dual.is_closed());
   CHECK(euler(dual) == 2);
