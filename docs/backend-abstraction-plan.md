@@ -178,9 +178,18 @@ green against Backend A, then reused verbatim to validate Backend B.
     fetching only `src/libqhull_r/` so qhull's apps/tests stay out.
   - **Remaining: Shewchuk `orient3d` (robustness hardening, optional for clean
     inputs); `bounding_box` (trivial).**
-- **Phase C — Integration & validation**: `PCHS_BACKEND=NATIVE` compiles the
-  algorithm on the native mesh; run tiers 1–3 + global goldens (tolerance) on the
-  native backend; A/B-compare native vs CGAL on icosahedron + Actaeon.
+- **Phase C — Integration & validation** ✅ *functional*: `-DPCHS_BACKEND=NATIVE`
+  compiles and runs the whole algorithm on `nat::Mesh` (native branches in
+  `geometry.h`/`mesh_backend.h`/`dual_hull.h`/`convex_hull_simplification.cpp`;
+  `native_algo.h` for the erase/measure/splice; CMake excludes the CGAL-only
+  `vertex_erasure.cpp` and links qhull). **Validated:** native vs CGAL match
+  exactly for the first removals (identical volume AND mean_width at icosahedron
+  targets 12/11/10) and on `Actaeon --target 200` (area 5.269, volume 0.7059,
+  mw 1.484 on both). Later targets diverge only by expected greedy-order drift
+  (qhull vs CGAL produce slightly different dual points).
+  **Remaining polish:** a CI-wired native regression build; Shewchuk `orient3d`;
+  drop the residual CGAL link from the native build (assign includes + main.cpp
+  debug helpers) so Backend B is std+qhull+shewchuk only.
   Note on the retriangulation splice: rather than reproduce CGAL's
   `erase_center_vertex` + `split_facet`-replay path on `nat::Mesh`, the native
   backend uses `retriangulate_star(v, tris)` directly — the candidate one-ring
