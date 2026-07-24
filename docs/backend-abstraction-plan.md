@@ -171,8 +171,13 @@ green against Backend A, then reused verbatim to validate Backend B.
     the hole directly from a triangle list (no ear-clip path replay). Unit +
     integration tested (`tests/test_native_mesh.cpp`), including sequential
     retriangulation of an icosahedron down to a tetrahedron.
-  - **Remaining: `convex_hull_3` via qhull (`libqhull_r`) → native mesh;
-    `bounding_box` (trivial).**
+  - ✅ `native_hull.{h,cpp}` — `nat::convex_hull_3(points) -> nat::Mesh` via
+    qhull's reentrant C API (Qt-triangulated, outward, compacted). Validated vs
+    CGAL (vertex count, volume, containment) on cube/icosahedron/random cloud
+    (`tests/test_native_hull.cpp`). Built behind `PCHS_QHULL` (default ON),
+    fetching only `src/libqhull_r/` so qhull's apps/tests stay out.
+  - **Remaining: Shewchuk `orient3d` (robustness hardening, optional for clean
+    inputs); `bounding_box` (trivial).**
 - **Phase C — Integration & validation**: `PCHS_BACKEND=NATIVE` compiles the
   algorithm on the native mesh; run tiers 1–3 + global goldens (tolerance) on the
   native backend; A/B-compare native vs CGAL on icosahedron + Actaeon.
