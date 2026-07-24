@@ -4,6 +4,8 @@
 
 #include "native_mesh.h"
 
+#include <igl/icosahedron.h>
+
 #include <algorithm>
 #include <array>
 #include <vector>
@@ -164,4 +166,58 @@ TEST(native_mesh_retriangulate_star)
   CHECK(M.size_of_facets() == 6);
   CHECK(M.is_closed());
   CHECK(M.euler() == 2);
+}
+
+// Integration-style: repeated star retriangulations on a real (icosahedron)
+// mesh, as the simplification loop mutates the dual. Exercises degree-5 stars
+// and many distinct rings; asserts the topological invariants each step.
+TEST(native_mesh_sequential_retriangulation)
+{
+  Eigen::MatrixXd V;
+  Eigen::MatrixXi F;
+  igl::icosahedron(V, F);
+
+  std::vector<Point3> pts(V.rows());
+  for(int i = 0; i < V.rows(); ++i) pts[i] = Point3(V(i, 0), V(i, 1), V(i, 2));
+  Point3 c(V.col(0).mean(), V.col(1).mean(), V.col(2).mean());
+  std::vector<std::array<int, 3>> faces(F.rows());
+  for(int i = 0; i < F.rows(); ++i)
+  {
+    faces[i] = {F(i, 0), F(i, 1), F(i, 2)};
+    if(nat::orient3d(pts[faces[i][0]], pts[faces[i][1]], pts[faces[i][2]], c) == nat::POSITIVE)
+      std::swap(faces[i][1], faces[i][2]);
+  }
+
+  Mesh M; M.build(pts, faces);
+  CHECK(M.size_of_vertices() == 12);
+  CHECK(M.euler() == 2);
+
+  // Remove vertices one at a time (fan-fill their stars) down to a tetrahedron.
+  while(M.size_of_vertices() > 4)
+  {
+    // Pick any live vertex whose removal keeps a valid closed mesh (degree >= 3).
+    auto v = M.vertices_begin();
+    while(v != M.vertices_end() && v->degree() < 3) ++v;
+    if(v == M.vertices_end()) break;
+
+    const int Vbefore = (int)M.size_of_vertices();
+    const int Fbefore = (int)M.size_of_facets();
+    auto ring = M.ring_vertices(v);
+    const int k = (int)ring.size();
+
+    std::vector<std::array<int, 3>> tris;
+    for(int i = 1; i + 1 < k; ++i) tris.push_back({0, i, i + 1});
+    M.retriangulate_star(v, tris);
+
+    CHECK(M.is_closed());
+    CHECK(M.is_pure_triangle());
+    CHECK(M.euler() == 2);
+    CHECK((int)M.size_of_vertices() == Vbefore - 1);
+    CHECK((int)M.size_of_facets() == Fbefore - 2);
+    M.garbage_collect();   // periodically compact; must stay valid
+    CHECK(M.euler() == 2);
+  }
+  CHECK(M.size_of_vertices() == 4);
+  CHECK(M.size_of_facets() == 4);   // tetrahedron
+  CHECK(M.is_closed());
 }
