@@ -48,7 +48,11 @@ ConvexHullSimplification::ConvexHullSimplification(
     auto dV_exact = point_matrix<EK>(dual_points_exact);
 
     Eigen::Matrix<double,Eigen::Dynamic,3,Eigen::RowMajor> dV;
+#if defined(PCHS_BACKEND_NATIVE)
+    dV = dV_exact;                                   // already double
+#else
     igl::copyleft::cgal::assign(dV_exact, true, dV);
+#endif
     {
       Eigen::VectorXi _1, _2;
       igl::remove_duplicate_vertices(
@@ -308,7 +312,11 @@ ConvexHullSimplification::get_primal_mesh()
   auto [pV_exact, pPI, pPC] = dual_to_primal_mesh(dual_, x0_exact_);
 
   Eigen::MatrixXd pV;
+#if defined(PCHS_BACKEND_NATIVE)
+  pV = pV_exact;                              // already double
+#else
   igl::copyleft::cgal::assign(pV_exact, pV);
+#endif
 
   return {pV, pPI, pPC};
 }

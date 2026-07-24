@@ -17,11 +17,17 @@
 namespace nat
 {
 
+// Tag types mirroring CGAL::ORIGIN / CGAL::NULL_VECTOR (defined early so the
+// vector/point constructors can accept them).
+struct Origin_t {};
+struct Null_vector_t {};
+
 class Vector3
 {
 public:
   Vector3() : x_(0), y_(0), z_(0) {}
   Vector3(double x, double y, double z) : x_(x), y_(y), z_(z) {}
+  Vector3(Null_vector_t) : x_(0), y_(0), z_(0) {}
   double x() const { return x_; }
   double y() const { return y_; }
   double z() const { return z_; }
@@ -70,9 +76,6 @@ struct Bbox
   const Point3 & max() const { return mx; }
 };
 
-// Tag types mirroring CGAL::ORIGIN / CGAL::NULL_VECTOR.
-struct Origin_t {};
-struct Null_vector_t {};
 inline constexpr Origin_t      ORIGIN{};
 inline constexpr Null_vector_t NULL_VECTOR{};
 

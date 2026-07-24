@@ -39,3 +39,4 @@ build-py/*
 imgui.ini
 .polyscope.ini
 build-headless/*
+build-native/*

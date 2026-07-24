@@ -66,9 +66,9 @@ TEST(native_mesh_build_octahedron)
   // Opposite pairing and next/prev consistency.
   for(auto e = M.edges_begin(); e != M.edges_end(); ++e)
   {
-    CHECK(e->opposite()->opposite() == e);
-    CHECK(e->next()->prev() == e);
-    CHECK(e->next()->next()->next() == e);   // triangle
+    CHECK(e->opposite()->opposite() == *e);
+    CHECK(e->next()->prev() == *e);
+    CHECK(e->next()->next()->next() == *e);   // triangle
   }
 }
 
@@ -107,8 +107,8 @@ TEST(native_mesh_flip_edge)
   CHECK(M.size_of_facets() == 8);
   for(auto e = M.edges_begin(); e != M.edges_end(); ++e)
   {
-    CHECK(e->next()->next()->next() == e);
-    CHECK(e->opposite()->opposite() == e);
+    CHECK(e->next()->next()->next() == *e);
+    CHECK(e->opposite()->opposite() == *e);
   }
 }
 

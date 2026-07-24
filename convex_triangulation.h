@@ -89,7 +89,7 @@ int flip_until_all_interior_edges_are_convex(
     auto side = edge_side<Polyhedron>(e);
     if(side == geom::ON_POSITIVE_SIDE)
     {
-      CGAL::Euler::flip_edge(e, poly);
+      mesh::flip_edge(e, poly);
       num_flips++;
       if(num_flips > max_flips)
         throw std::runtime_error("Too many flips, something is wrong.");

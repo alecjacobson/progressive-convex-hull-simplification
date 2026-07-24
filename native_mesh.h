@@ -32,6 +32,7 @@ namespace nat
 {
 
 class Mesh;
+class EdgeIter;
 
 // Shared handle: a {mesh, index} pair that also serves as a forward iterator.
 // Kind selects which array it indexes (for iteration bounds / skip-deleted).
@@ -157,10 +158,10 @@ public:
   Halfedge_iterator halfedges_end()   const { return {const_cast<Mesh*>(this), (int)he_.size()}; }
   Facet_iterator   facets_begin()    const { return begin_<Elem::F>(); }
   Facet_iterator   facets_end()      const { return {const_cast<Mesh*>(this), (int)fr_.size()}; }
-  // Edge iteration: one representative half-edge per edge (the even index).
-  // Callers use edges_begin/end and treat entries as half-edges.
-  Halfedge_iterator edges_begin() const;
-  Halfedge_iterator edges_end()   const { return {const_cast<Mesh*>(this), (int)he_.size()}; }
+  // Edge iteration: one representative half-edge per edge. Steps by 2 (opposite
+  // pairs are adjacent), so each edge is visited exactly once.
+  EdgeIter edges_begin() const;
+  EdgeIter edges_end()   const;
 
   // --- construction ------------------------------------------------------
   // Build from a triangle soup. `tris` are CCW index triples into `pts`.
@@ -251,12 +252,38 @@ template <> inline int Handle<Elem::V>::degree() const
   return d;
 }
 
-inline Mesh::Halfedge_iterator Mesh::edges_begin() const
+// One representative half-edge per edge; operator++ steps by 2 (skipping dead
+// pairs). Dereferences to a Halfedge handle so callers use e->next() etc.
+class EdgeIter
+{
+public:
+  EdgeIter(Mesh * m, int i) : m_(m), i_(i) {}
+  Handle<Elem::H> operator*() const { return {m_, i_}; }
+  Handle<Elem::H> operator->() const { return {m_, i_}; }
+  bool operator==(const EdgeIter & o) const { return i_ == o.i_; }
+  bool operator!=(const EdgeIter & o) const { return i_ != o.i_; }
+  EdgeIter & operator++()
+  {
+    const int n = (int)m_->he_.size();
+    i_ += 2;
+    while(i_ < n && m_->he_[i_].dead) i_ += 2;
+    return *this;
+  }
+private:
+  Mesh * m_;
+  int i_;
+};
+
+inline EdgeIter Mesh::edges_begin() const
 {
   Mesh * m = const_cast<Mesh *>(this);
   int i = 0;
   while(i < (int)he_.size() && he_[i].dead) i += 2;
   return {m, i};
+}
+inline EdgeIter Mesh::edges_end() const
+{
+  return {const_cast<Mesh *>(this), (int)he_.size()};
 }
 
 // ---------------------------------------------------------------------------

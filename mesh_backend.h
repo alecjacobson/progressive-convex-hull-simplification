@@ -26,6 +26,7 @@
 #include <CGAL/Polyhedron_items_with_id_3.h>
 #include <CGAL/convex_hull_3.h>
 #include <CGAL/bounding_box.h>
+#include <CGAL/boost/graph/Euler_operations.h>
 
 namespace mesh
 {
@@ -48,6 +49,10 @@ namespace mesh
   {
     return CGAL::bounding_box(begin, end);
   }
+
+  // Flip the interior edge of half-edge h.
+  template <class H, class Poly>
+  inline void flip_edge(H h, Poly & poly) { CGAL::Euler::flip_edge(h, poly); }
 }
 
 #elif defined(PCHS_BACKEND_NATIVE)
@@ -87,6 +92,10 @@ namespace mesh
     }
     return bb;
   }
+
+  // Flip the interior edge of half-edge h.
+  template <class H, class Poly>
+  inline void flip_edge(H h, Poly & poly) { poly.flip_edge(h); }
 }
 
 #endif

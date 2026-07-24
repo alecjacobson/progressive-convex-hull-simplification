@@ -6,16 +6,28 @@ list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 option(PCHS_INTERACTIVE "Build the interactive polyscope viewer (requires polyscope + embree)" ON)
 option(PCHS_PYTHON_BINDINGS "Build Python bindings via nanobind" OFF)
 option(PCHS_TESTS "Build the test suite (CTest)" ON)
+set(PCHS_BACKEND "CGAL" CACHE STRING "Mesh backend: CGAL or NATIVE")
+# The native backend needs qhull; force it on when selected.
+if(PCHS_BACKEND STREQUAL "NATIVE")
+  set(PCHS_QHULL ON CACHE BOOL "" FORCE)
+endif()
 option(PCHS_QHULL "Fetch qhull and build the native backend's convex hull" ON)
 
 include(dependencies)
 
 #
-add_library(progressive_convex_hull_simplification STATIC
+set(PCHS_LIB_SOURCES
   chebyshev_center.cpp
-  vertex_erasure.cpp
   convex_hull_simplification.cpp
 )
+if(PCHS_BACKEND STREQUAL "NATIVE")
+  list(APPEND PCHS_LIB_SOURCES native_hull.cpp)
+else()
+  # CGAL-only translation unit (Euler ops, ear-clip path).
+  list(APPEND PCHS_LIB_SOURCES vertex_erasure.cpp)
+endif()
+
+add_library(progressive_convex_hull_simplification STATIC ${PCHS_LIB_SOURCES})
 target_include_directories(progressive_convex_hull_simplification PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -24,6 +36,10 @@ target_link_libraries(progressive_convex_hull_simplification PUBLIC
   igl_copyleft::cgal
   SDLP
 )
+if(PCHS_BACKEND STREQUAL "NATIVE")
+  target_compile_definitions(progressive_convex_hull_simplification PUBLIC PCHS_BACKEND_NATIVE)
+  target_link_libraries(progressive_convex_hull_simplification PUBLIC pchs_qhull_r)
+endif()
 
 add_executable(pchs main.cpp)
 target_link_libraries(pchs PUBLIC

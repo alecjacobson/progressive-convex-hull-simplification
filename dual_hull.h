@@ -101,12 +101,17 @@ dual_to_primal_points(
       const auto n = geom::cross_product(B - A, C - A);
       const auto bc = ((A - geom::ORIGIN) + (B - geom::ORIGIN) + (C - geom::ORIGIN)) / Scalar(3);
       const Scalar beta = n * bc;
+#if defined(PCHS_BACKEND_NATIVE)
+      // Single kernel: x0 is already in the dual's kernel, no conversion.
+      const typename Polyhedron::Traits::Point_3 & x0 = x0_exact;
+#else
       using EK = typename CGAL::Kernel_traits<x0_type>::Kernel;
       typename Polyhedron::Traits::Point_3 x0;
       {
         CGAL::Cartesian_converter<EK, typename Polyhedron::Traits> to_dual_kernel;
         x0 = to_dual_kernel(x0_exact);
       }
+#endif
       const auto p = geom::ORIGIN + (x0 - geom::ORIGIN) + (n / beta);
       pV.row(f->id()) << p.x(), p.y(), p.z();
     }
