@@ -163,12 +163,25 @@ green against Backend A, then reused verbatim to validate Backend B.
     inputs, `tests/test_native_geom.cpp`). Note: `nat::orient3d` matches CGAL's
     sign convention (the textbook formula is negated — see the test).
     **Remaining: swap in Shewchuk `orient3d` for near-degenerate robustness.**
-  1. `geom` for native double point/vector + Shewchuk `orient3d` (`predicates.c`).
-  2. Native half-edge mesh + iterators + the Euler ops (tier-3 test #4).
-  3. `convex_hull_3` via qhull (`libqhull_r`) → native mesh; `bounding_box`.
+  - ✅ `native_mesh.h` (`nat::Mesh`) — std-only, index-based half-edge mesh:
+    paired opposites (`opposite(i)==i^1`), skip-deleted handle/iterators with
+    CGAL-like navigation, explicit border half-edges, `build()` from a triangle
+    soup, `flip_edge()`, `ring_vertices()`, `garbage_collect()`, and — the key
+    design win — `retriangulate_star(v, tris)`: erase a vertex's fan and fill
+    the hole directly from a triangle list (no ear-clip path replay). Unit +
+    integration tested (`tests/test_native_mesh.cpp`), including sequential
+    retriangulation of an icosahedron down to a tetrahedron.
+  - **Remaining: `convex_hull_3` via qhull (`libqhull_r`) → native mesh;
+    `bounding_box` (trivial).**
 - **Phase C — Integration & validation**: `PCHS_BACKEND=NATIVE` compiles the
   algorithm on the native mesh; run tiers 1–3 + global goldens (tolerance) on the
   native backend; A/B-compare native vs CGAL on icosahedron + Actaeon.
+  Note on the retriangulation splice: rather than reproduce CGAL's
+  `erase_center_vertex` + `split_facet`-replay path on `nat::Mesh`, the native
+  backend uses `retriangulate_star(v, tris)` directly — the candidate one-ring
+  triangulation (as a triangle list over the ring) is spliced into the main mesh
+  in one call. So the native `measure_vertex_erasure`/apply step is a thin
+  backend-conditional path, not a faithful port of the CGAL ear-clip machinery.
 
 ## 5. Risks / watch-list
 - **Euler op semantics** must match CGAL exactly (return-halfedge conventions);
