@@ -1,0 +1,130 @@
+#pragma once
+// -----------------------------------------------------------------------------
+// Native geometry kernel (Backend B) — std-only double point/vector types and
+// the geometry primitives the algorithm needs, mirroring the CGAL API so that
+// geometry.h's PCHS_BACKEND_NATIVE branch can `using`-import these into `geom`.
+//
+// Everything here is plain double arithmetic EXCEPT orient3d, the one predicate
+// whose sign drives every convexity decision. It is currently a straight
+// determinant (exact for integer/dyadic inputs, which is what the unit tests
+// use); Phase-B hardening replaces the body with Shewchuk's adaptive robust
+// orient3d for near-degenerate robustness. The call sites do not change.
+// -----------------------------------------------------------------------------
+#include <cmath>
+
+namespace nat
+{
+
+struct Vector3
+{
+  double x, y, z;
+};
+
+struct Point3
+{
+  double x, y, z;
+};
+
+// Tag types mirroring CGAL::ORIGIN / CGAL::NULL_VECTOR.
+struct Origin_t {};
+struct Null_vector_t {};
+inline constexpr Origin_t      ORIGIN{};
+inline constexpr Null_vector_t NULL_VECTOR{};
+
+// Sign / oriented-side enumeration mirroring CGAL::Sign (values match).
+enum Sign { NEGATIVE = -1, ZERO = 0, POSITIVE = 1 };
+inline constexpr Sign ON_NEGATIVE_SIDE   = NEGATIVE;
+inline constexpr Sign ON_ORIENTED_BOUNDARY = ZERO;
+inline constexpr Sign ON_POSITIVE_SIDE   = POSITIVE;
+
+// --- affine operators (match CGAL's point/vector algebra) -----------------
+
+inline Vector3 operator-(const Point3 & a, const Point3 & b)
+{ return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+
+inline Vector3 operator-(const Point3 & a, Origin_t)
+{ return {a.x, a.y, a.z}; }
+
+inline Point3 operator+(Origin_t, const Vector3 & v)
+{ return {v.x, v.y, v.z}; }
+
+inline Point3 operator+(const Point3 & a, const Vector3 & v)
+{ return {a.x + v.x, a.y + v.y, a.z + v.z}; }
+
+inline Vector3 operator+(const Vector3 & a, const Vector3 & b)
+{ return {a.x + b.x, a.y + b.y, a.z + b.z}; }
+
+inline Vector3 operator-(const Vector3 & a, const Vector3 & b)
+{ return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+
+inline Vector3 operator-(const Vector3 & v)
+{ return {-v.x, -v.y, -v.z}; }
+
+inline Vector3 operator*(double s, const Vector3 & v)
+{ return {s * v.x, s * v.y, s * v.z}; }
+
+inline Vector3 operator*(const Vector3 & v, double s)
+{ return {s * v.x, s * v.y, s * v.z}; }
+
+inline Vector3 operator/(const Vector3 & v, double s)
+{ return {v.x / s, v.y / s, v.z / s}; }
+
+// CGAL spells the dot product as operator* on two vectors.
+inline double operator*(const Vector3 & a, const Vector3 & b)
+{ return a.x * b.x + a.y * b.y + a.z * b.z; }
+
+// --- named primitives (mirror CGAL free functions) ------------------------
+
+inline Vector3 cross_product(const Vector3 & a, const Vector3 & b)
+{
+  return {a.y * b.z - a.z * b.y,
+          a.z * b.x - a.x * b.z,
+          a.x * b.y - a.y * b.x};
+}
+
+inline double scalar_product(const Vector3 & a, const Vector3 & b)
+{ return a * b; }
+
+inline Point3 centroid(const Point3 & a, const Point3 & b, const Point3 & c)
+{ return {(a.x + b.x + c.x) / 3.0,
+          (a.y + b.y + c.y) / 3.0,
+          (a.z + b.z + c.z) / 3.0}; }
+
+inline double squared_area(const Point3 & a, const Point3 & b, const Point3 & c)
+{
+  const Vector3 n = cross_product(b - a, c - a);
+  return 0.25 * (n * n);
+}
+
+inline double squared_distance(const Point3 & a, const Point3 & b)
+{
+  const Vector3 d = a - b;
+  return d * d;
+}
+
+inline double to_double(double x) { return x; }
+inline double sqrt(double x) { return std::sqrt(x); }
+
+// orient3d: sign of the signed volume of (a,b,c,d).
+// > 0 (POSITIVE) when d is on the positive side of the plane through a,b,c
+// (i.e. (a,b,c) is counter-clockwise seen from d) — matching CGAL::orientation.
+//
+// TODO(Phase B): replace with Shewchuk's adaptive robust orient3d.
+inline Sign orient3d(const Point3 & a, const Point3 & b, const Point3 & c,
+                     const Point3 & d)
+{
+  // CGAL::orientation(a,b,c,d) == sign of det[(b-a),(c-a),(d-a)]
+  //                            == (d-a) . ((b-a) x (c-a)).
+  const Vector3 ba = b - a;
+  const Vector3 ca = c - a;
+  const Vector3 da = d - a;
+  const double det = da * cross_product(ba, ca);
+  return det > 0 ? POSITIVE : (det < 0 ? NEGATIVE : ZERO);
+}
+
+// Overload named `orientation` to match the CGAL spelling used at call sites.
+inline Sign orientation(const Point3 & a, const Point3 & b, const Point3 & c,
+                        const Point3 & d)
+{ return orient3d(a, b, c, d); }
+
+}  // namespace nat
