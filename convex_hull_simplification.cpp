@@ -5,10 +5,6 @@
 #include <igl/remove_duplicate_vertices.h>
 #include <igl/copyleft/cgal/assign.h>
 
-#include <CGAL/convex_hull_3.h>
-#include <CGAL/bounding_box.h>
-
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -27,22 +23,22 @@ ConvexHullSimplification::ConvexHullSimplification(
   , cost_function_(cost_function)
   , stats_({0, 0, 0, 0})
 {
-  using EPolyhedron = CGAL::Polyhedron_3<EK, CGAL::Polyhedron_items_with_id_3>;
+  using EPolyhedron = mesh::Polyhedron;
 
-  // --- Primal convex hull (exact kernel) ---
+  // --- Primal convex hull ---
   {
     const double t0 = igl::get_seconds();
     auto primal_points = point_list<EK>(V);
     EPolyhedron primal;
     //printf("primal points: %d\n", (int)primal_points.size());
-    CGAL::convex_hull_3(primal_points.begin(), primal_points.end(), primal);
+    mesh::convex_hull_3(primal_points.begin(), primal_points.end(), primal);
     //printf("primal facets: %d\n", (int)primal.size_of_facets());
     stats_.t_primal_hull = igl::get_seconds() - t0;
 
     // --- Dual hull (Chebyshev center + dual points + dedup + convex_hull_3) ---
     const double t1 = igl::get_seconds();
-    const auto bb = CGAL::bounding_box(primal_points.begin(), primal_points.end());
-    const double bbd_sqr_len = CGAL::squared_distance(bb.min(), bb.max());
+    const auto bb = mesh::bounding_box(primal_points.begin(), primal_points.end());
+    const double bbd_sqr_len = geom::squared_distance(bb.min(), bb.max());
     const double primal_squared_area_tol = 1e-15 * bbd_sqr_len * bbd_sqr_len;
     //printf("primal squared area tol: %g\n", primal_squared_area_tol);
     x0_exact_ = polyhedron_chebyshev_center(primal, primal_squared_area_tol);
@@ -63,7 +59,7 @@ ConvexHullSimplification::ConvexHullSimplification(
 
     {
       auto dpts = point_list<IK>(dV);
-      CGAL::convex_hull_3(dpts.begin(), dpts.end(), dual_);
+      mesh::convex_hull_3(dpts.begin(), dpts.end(), dual_);
     }
     stats_.t_dual_hull = igl::get_seconds() - t1;
   }
@@ -392,9 +388,9 @@ ConvexHullSimplification::Stats ConvexHullSimplification::stats() const
 double ConvexHullSimplification::mean_width() const
 {
   // Chebyshev center (EK == IK here, both are inexact constructions kernel)
-  const double x0x = CGAL::to_double(x0_exact_.x());
-  const double x0y = CGAL::to_double(x0_exact_.y());
-  const double x0z = CGAL::to_double(x0_exact_.z());
+  const double x0x = geom::to_double(x0_exact_.x());
+  const double x0y = geom::to_double(x0_exact_.y());
+  const double x0z = geom::to_double(x0_exact_.z());
 
   // For a dual triangular face, return the corresponding primal vertex position
   // via the inverse polarity map: p = x0 + n_face / (n_face · centroid).
@@ -404,12 +400,12 @@ double ConvexHullSimplification::mean_width() const
     const auto & A = h->vertex()->point();
     const auto & B = h->next()->vertex()->point();
     const auto & C = h->next()->next()->vertex()->point();
-    const auto n  = CGAL::cross_product(B - A, C - A);
-    const auto bc = ((A - CGAL::ORIGIN) + (B - CGAL::ORIGIN) + (C - CGAL::ORIGIN)) / IK::FT(3);
-    const double beta = CGAL::to_double(n * bc);
-    return {x0x + CGAL::to_double(n.x()) / beta,
-            x0y + CGAL::to_double(n.y()) / beta,
-            x0z + CGAL::to_double(n.z()) / beta};
+    const auto n  = geom::cross_product(B - A, C - A);
+    const auto bc = ((A - geom::ORIGIN) + (B - geom::ORIGIN) + (C - geom::ORIGIN)) / IK::FT(3);
+    const double beta = geom::to_double(n * bc);
+    return {x0x + geom::to_double(n.x()) / beta,
+            x0y + geom::to_double(n.y()) / beta,
+            x0z + geom::to_double(n.z()) / beta};
   };
 
   double sum = 0.0;
@@ -420,9 +416,9 @@ double ConvexHullSimplification::mean_width() const
     const auto & p2 = e->opposite()->vertex()->point();
     // These don't need to be normalized if we're using the atan2 version
     const Eigen::Vector3d n1 = Eigen::Vector3d(
-      CGAL::to_double(p1.x()), CGAL::to_double(p1.y()), CGAL::to_double(p1.z()));
+      geom::to_double(p1.x()), geom::to_double(p1.y()), geom::to_double(p1.z()));
     const Eigen::Vector3d n2 = Eigen::Vector3d(
-      CGAL::to_double(p2.x()), CGAL::to_double(p2.y()), CGAL::to_double(p2.z()));
+      geom::to_double(p2.x()), geom::to_double(p2.y()), geom::to_double(p2.z()));
 
     // Dual faces give the two endpoints of the primal edge
     const Eigen::Vector3d q0 = primal_vertex(e->facet());

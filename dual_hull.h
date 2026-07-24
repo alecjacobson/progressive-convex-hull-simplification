@@ -1,4 +1,5 @@
 #pragma once
+#include "geometry.h"
 #include "polyhedron_utils.h"
 #include "chebyshev_center.h"
 
@@ -24,7 +25,7 @@ typename Polyhedron::Traits::Point_3 polyhedron_chebyshev_center(
   for(auto f = poly.facets_begin(); f != poly.facets_end(); ++f)
   {
     auto h = f->halfedge();
-    if(CGAL::to_double(CGAL::squared_area(
+    if(geom::to_double(geom::squared_area(
         h->vertex()->point(),
         h->next()->vertex()->point(),
         h->next()->next()->vertex()->point())) > primal_squared_area_tol) { nf++; }
@@ -37,10 +38,10 @@ typename Polyhedron::Traits::Point_3 polyhedron_chebyshev_center(
     const auto & A = h->vertex()->point();
     const auto & B = h->next()->vertex()->point();
     const auto & C = h->next()->next()->vertex()->point();
-    if(CGAL::to_double(CGAL::squared_area(A,B,C)) <= primal_squared_area_tol) { continue; }
-    const Eigen::Vector3d a(CGAL::to_double(A.x()),CGAL::to_double(A.y()),CGAL::to_double(A.z()));
-    const Eigen::Vector3d b(CGAL::to_double(B.x()),CGAL::to_double(B.y()),CGAL::to_double(B.z()));
-    const Eigen::Vector3d c(CGAL::to_double(C.x()),CGAL::to_double(C.y()),CGAL::to_double(C.z()));
+    if(geom::to_double(geom::squared_area(A,B,C)) <= primal_squared_area_tol) { continue; }
+    const Eigen::Vector3d a(geom::to_double(A.x()),geom::to_double(A.y()),geom::to_double(A.z()));
+    const Eigen::Vector3d b(geom::to_double(B.x()),geom::to_double(B.y()),geom::to_double(B.z()));
+    const Eigen::Vector3d c(geom::to_double(C.x()),geom::to_double(C.y()),geom::to_double(C.z()));
     const Eigen::Vector3d n = (b-a).cross(c-a);
     const Eigen::Vector3d bc = (a+b+c)/3.0;
     P.row(i++) << n(0), n(1), n(2), -n.dot(bc);
@@ -72,12 +73,12 @@ std::vector<typename Polyhedron::Traits::Point_3> dual_points_list(
     const auto & A = h->vertex()->point();
     const auto & B = h->next()->vertex()->point();
     const auto & C = h->next()->next()->vertex()->point();
-    if(CGAL::to_double(CGAL::squared_area(A,B,C)) <= primal_squared_area_tol) { continue; }
-    const Vector n = CGAL::cross_product(B - A, C - A);
-    const Vector bc = ((A - CGAL::ORIGIN) + (B - CGAL::ORIGIN) + (C - CGAL::ORIGIN)) / FT(3);
+    if(geom::to_double(geom::squared_area(A,B,C)) <= primal_squared_area_tol) { continue; }
+    const Vector n = geom::cross_product(B - A, C - A);
+    const Vector bc = ((A - geom::ORIGIN) + (B - geom::ORIGIN) + (C - geom::ORIGIN)) / FT(3);
     const FT b = -(n * bc);
-    const FT denom = n * (x0 - CGAL::ORIGIN) + b;
-    dpts.push_back(CGAL::ORIGIN + (-(n / denom)));
+    const FT denom = n * (x0 - geom::ORIGIN) + b;
+    dpts.push_back(geom::ORIGIN + (-(n / denom)));
   }
   return dpts;
 }
@@ -97,8 +98,8 @@ dual_to_primal_points(
       const auto & A = h->vertex()->point();
       const auto & B = h->next()->vertex()->point();
       const auto & C = h->next()->next()->vertex()->point();
-      const auto n = CGAL::cross_product(B - A, C - A);
-      const auto bc = ((A - CGAL::ORIGIN) + (B - CGAL::ORIGIN) + (C - CGAL::ORIGIN)) / Scalar(3);
+      const auto n = geom::cross_product(B - A, C - A);
+      const auto bc = ((A - geom::ORIGIN) + (B - geom::ORIGIN) + (C - geom::ORIGIN)) / Scalar(3);
       const Scalar beta = n * bc;
       using EK = typename CGAL::Kernel_traits<x0_type>::Kernel;
       typename Polyhedron::Traits::Point_3 x0;
@@ -106,7 +107,7 @@ dual_to_primal_points(
         CGAL::Cartesian_converter<EK, typename Polyhedron::Traits> to_dual_kernel;
         x0 = to_dual_kernel(x0_exact);
       }
-      const auto p = CGAL::ORIGIN + (x0 - CGAL::ORIGIN) + (n / beta);
+      const auto p = geom::ORIGIN + (x0 - geom::ORIGIN) + (n / beta);
       pV.row(f->id()) << p.x(), p.y(), p.z();
     }
   }

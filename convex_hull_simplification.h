@@ -1,12 +1,8 @@
 #pragma once
 #include "vertex_erasure.h"
+#include "mesh_backend.h"
 
 #include <igl/min_heap.h>
-
-#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Polyhedron_3.h>
-#include <CGAL/Polyhedron_items_with_id_3.h>
 
 #include <Eigen/Core>
 #include <tuple>
@@ -23,11 +19,11 @@
 class ConvexHullSimplification
 {
 public:
-  //using EK = CGAL::Exact_predicates_exact_constructions_kernel;
-  using EK = CGAL::Exact_predicates_inexact_constructions_kernel;
-  using IK = CGAL::Exact_predicates_inexact_constructions_kernel;
-  using IPolyhedron = CGAL::Polyhedron_3<IK, CGAL::Polyhedron_items_with_id_3>;
-  using Scalar = IK::FT;
+  // Kernel/mesh types come from the selected backend (see mesh_backend.h).
+  using EK = mesh::Kernel;
+  using IK = mesh::Kernel;
+  using IPolyhedron = mesh::Polyhedron;
+  using Scalar = mesh::Kernel::FT;
 
   // Build the primal convex hull, compute the Chebyshev center, construct the
   // dual, and initialize the priority queue with costs for every dual vertex.

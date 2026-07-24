@@ -141,12 +141,12 @@ measure_vertex_erasure(
   for(auto f = one_ring_copy.facets_begin(); f != one_ring_copy.facets_end(); ++f)
   {
     auto h = f->halfedge();
-    const auto ori = CGAL::orientation(
+    const auto ori = geom::orientation(
       h->vertex()->point(),
       h->next()->vertex()->point(),
       h->next()->next()->vertex()->point(),
       p);
-    if(ori == CGAL::NEGATIVE)
+    if(ori == geom::NEGATIVE)
       throw std::runtime_error("Removed point lies on negative side of a new face.");
   }
 #endif

@@ -46,11 +46,11 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
       const Point & A, const Point & B, const Point & C)
   {
     // N = (A-B)×(C-B)
-    const auto n = CGAL::cross_product(A - B, C - B);
-    const auto bc = CGAL::centroid(A, B, C) - CGAL::ORIGIN;
-    const auto beta = CGAL::scalar_product(n, bc);
+    const auto n = geom::cross_product(A - B, C - B);
+    const auto bc = geom::centroid(A, B, C) - geom::ORIGIN;
+    const auto beta = geom::scalar_product(n, bc);
     // n / beta
-    const auto p = CGAL::ORIGIN + (n / beta);
+    const auto p = geom::ORIGIN + (n / beta);
     return p;
   };
 
@@ -72,14 +72,14 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
   {
     using Vector = typename CGAL::Kernel_traits<Point>::Kernel::Vector_3;
 
-    Vector sum = CGAL::NULL_VECTOR;
+    Vector sum = geom::NULL_VECTOR;
 
     for (int i = 0; i < vertices.size(); i++)
     {
       const auto & v0 = all_primal_vertices[vertices[i]];
       const auto & v1 = all_primal_vertices[vertices[(i + 1) % vertices.size()]];
 
-      sum = sum + CGAL::cross_product(v0 - CGAL::ORIGIN, v1 - CGAL::ORIGIN);
+      sum = sum + geom::cross_product(v0 - geom::ORIGIN, v1 - geom::ORIGIN);
     }
 
     return sum;
@@ -88,8 +88,8 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
   { 
     Point bc(0,0,0);
     for(const auto & v : vertices)
-      bc = bc + (all_primal_vertices[v] - CGAL::ORIGIN);
-    return ((bc-CGAL::ORIGIN) / Scalar(vertices.size()));
+      bc = bc + (all_primal_vertices[v] - geom::ORIGIN);
+    return ((bc-geom::ORIGIN) / Scalar(vertices.size()));
   };
 
   Scalar contribution_bottom = 0;
@@ -146,13 +146,13 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
       {
         const auto bc_v = centroid(primal_vertices);
         // volume += n⋅bc
-        contribution_bottom += CGAL::scalar_product(n_v, bc_v);
+        contribution_bottom += geom::scalar_product(n_v, bc_v);
         break;
       }
       case CostFunction::PRIMAL_AREA:
       {
         static_assert(!std::is_same_v<Scalar, CGAL::Epeck::FT>, "Scalar must not be Epeck");
-        contribution_bottom += CGAL::sqrt(n_v.squared_length()) * 0.5;
+        contribution_bottom += geom::sqrt(n_v.squared_length()) * 0.5;
         break;
       }
     }
@@ -192,12 +192,12 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
       case CostFunction::PRIMAL_VOLUME:
       {
         const auto bc = centroid(primal_vertices);
-        contribution_top += CGAL::scalar_product(n, bc);
+        contribution_top += geom::scalar_product(n, bc);
         break;
       }
       case CostFunction::PRIMAL_AREA:
       {
-        contribution_top += CGAL::sqrt(n.squared_length()) * 0.5;
+        contribution_top += geom::sqrt(n.squared_length()) * 0.5;
         break;
       }
     }
@@ -225,8 +225,8 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
     const auto & A = f->halfedge()->vertex()->point();
     const auto & B = f->halfedge()->next()->vertex()->point();
     const auto & C = f->halfedge()->next()->next()->vertex()->point();
-    const auto ori = CGAL::orientation(A, B, C, Point(0,0,0));
-    if(ori != CGAL::ON_NEGATIVE_SIDE)
+    const auto ori = geom::orientation(A, B, C, Point(0,0,0));
+    if(ori != geom::ON_NEGATIVE_SIDE)
     {
       contains_origin = true;
       break;
@@ -249,7 +249,7 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
     {
       // edge length between u and v
       const auto edge_vec = p_pu - p_pv;
-      const auto edge_len = CGAL::sqrt(edge_vec.squared_length());
+      const auto edge_len = geom::sqrt(edge_vec.squared_length());
       if(edge_len == 0.0)
       {
         return Scalar(0.0);
@@ -257,8 +257,8 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
       const auto edge_dir = edge_vec / edge_len;
       //// dihedral angle between faces i and j
       const auto dihedral_angle = atan2(
-          CGAL::scalar_product(CGAL::cross_product(p_nj, p_ni), edge_dir),
-          CGAL::scalar_product(p_ni, p_nj));
+          geom::scalar_product(geom::cross_product(p_nj, p_ni), edge_dir),
+          geom::scalar_product(p_ni, p_nj));
       return edge_len * dihedral_angle;
     };
 
@@ -279,8 +279,8 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
       const auto a = h->opposite()->vertex()->point();
       const auto b = h->vertex()->point();
       const auto c = h_next->vertex()->point();
-      const auto p_ni = (p0 - CGAL::ORIGIN);
-      const auto p_nj = (b - CGAL::ORIGIN);
+      const auto p_ni = (p0 - geom::ORIGIN);
+      const auto p_nj = (b - geom::ORIGIN);
       const auto p_pu = dual_triangle_to_point_uncached( a,b,p0);
       const auto p_pv = dual_triangle_to_point_uncached( b,c,p0);
       return mean_width_contribution(p_ni, p_nj, p_pu, p_pv);
@@ -294,13 +294,13 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
       const auto d_pj = e->opposite()->vertex()->point();
       //const auto normalize = [](const auto & v)
       //{
-      //  const auto len = CGAL::sqrt(v.squared_length());
-      //  return (len > Scalar(0.0)) ? (v / len) : CGAL::NULL_VECTOR;
+      //  const auto len = geom::sqrt(v.squared_length());
+      //  return (len > Scalar(0.0)) ? (v / len) : geom::NULL_VECTOR;
       //};
       // primal face normals (unnormalized if we used atan2 in
       // mean_width_contribution)
-      const auto p_ni = (d_pi - CGAL::ORIGIN);
-      const auto p_nj = (d_pj - CGAL::ORIGIN);
+      const auto p_ni = (d_pi - geom::ORIGIN);
+      const auto p_nj = (d_pj - geom::ORIGIN);
       // (ij) between dual vertices i and j. Lies between dual faces u and v
       // which are always triangles and correspond to primal vertices u and v.
       const auto p_pu = 
@@ -338,8 +338,8 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
       assert(h->opposite()->vertex()->id() == g->opposite()->vertex()->id() && "h and g should point from the same vertex");
       const auto d_pi = h->vertex()->point();
       const auto d_pj = h->opposite()->vertex()->point();
-      const auto p_ni = (d_pi - CGAL::ORIGIN);
-      const auto p_nj = (d_pj - CGAL::ORIGIN);
+      const auto p_ni = (d_pi - geom::ORIGIN);
+      const auto p_nj = (d_pj - geom::ORIGIN);
 
       const auto p_pu_new = 
           dual_triangle_to_point_uncached(

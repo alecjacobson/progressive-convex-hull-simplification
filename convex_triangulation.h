@@ -1,4 +1,5 @@
 #pragma once
+#include "geometry.h"
 #include <CGAL/Polyhedron_incremental_builder_3.h>
 #include <CGAL/Modifier_base.h>
 #include <CGAL/convex_hull_3.h>
@@ -28,12 +29,12 @@ edge_side(typename Polyhedron::Halfedge_const_handle e)
   const Point& c1 = h1->next()->next()->vertex()->point();
   const Point& p2 = h2->next()->vertex()->point();
 
-  const auto ori = CGAL::orientation(a1,b1,c1,p2);
+  const auto ori = geom::orientation(a1,b1,c1,p2);
   switch(ori)
   {
-    case CGAL::POSITIVE: return CGAL::ON_POSITIVE_SIDE;
-    case CGAL::NEGATIVE: return CGAL::ON_NEGATIVE_SIDE;
-    default:             return CGAL::ON_ORIENTED_BOUNDARY;
+    case geom::POSITIVE: return geom::ON_POSITIVE_SIDE;
+    case geom::NEGATIVE: return geom::ON_NEGATIVE_SIDE;
+    default:             return geom::ON_ORIENTED_BOUNDARY;
   }
 }
 
@@ -45,7 +46,7 @@ void confirm_all_edges_are_convex(const Polyhedron& poly)
   {
     if(e > e->opposite()) continue;
     if(e->is_border_edge()) continue;
-    if(edge_side<Polyhedron>(e) == CGAL::ON_POSITIVE_SIDE)
+    if(edge_side<Polyhedron>(e) == geom::ON_POSITIVE_SIDE)
       throw std::runtime_error("Found a non-convex edge.");
   }
 }
@@ -86,7 +87,7 @@ int flip_until_all_interior_edges_are_convex(
     stack.pop_back();
     if(e->id()) { continue; } // marked convex in the meantime
     auto side = edge_side<Polyhedron>(e);
-    if(side == CGAL::ON_POSITIVE_SIDE)
+    if(side == geom::ON_POSITIVE_SIDE)
     {
       CGAL::Euler::flip_edge(e, poly);
       num_flips++;
@@ -287,7 +288,7 @@ void one_ring_triangulation_convex_via_convex_hull(
       const auto & a = hh->vertex()->point();
       const auto & b = hh->next()->vertex()->point();
       const auto & c = hh->next()->next()->vertex()->point();
-      if(CGAL::orientation(a,b,c,p) == CGAL::NEGATIVE)
+      if(geom::orientation(a,b,c,p) == geom::NEGATIVE)
       {
         found_any = true;
         one_ring_copy.erase_facet(hh);
