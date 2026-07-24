@@ -5,6 +5,7 @@ add_executable(pchs_tests
   test_invariants.cpp
   test_components.cpp
   test_native_geom.cpp
+  test_native_mesh.cpp
 )
 target_link_libraries(pchs_tests PRIVATE
   progressive_convex_hull_simplification
@@ -19,7 +20,8 @@ target_compile_options(pchs_tests PRIVATE -Wno-format)
 # One CTest entry per test tier so failures are localized.
 add_test(NAME unit.invariants COMMAND pchs_tests invariants_)
 add_test(NAME unit.components COMMAND pchs_tests comp_)
-add_test(NAME unit.native_geom COMMAND pchs_tests native_)
+add_test(NAME unit.native_geom COMMAND pchs_tests native_geom)
+add_test(NAME unit.native_mesh COMMAND pchs_tests native_mesh)
 
 # Golden regression on the icosahedron (byte-exact for the CGAL backend).
 add_test(NAME golden.icosahedron
