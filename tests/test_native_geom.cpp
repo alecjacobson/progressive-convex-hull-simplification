@@ -79,9 +79,9 @@ TEST(native_constructions_match_cgal)
     // cross product of edge vectors
     const CV cx = CGAL::cross_product(b - a, c - a);
     const nat::Vector3 nx = nat::cross_product(nb - na, nc - na);
-    CHECK_NEAR(CGAL::to_double(cx.x()), nx.x, tol);
-    CHECK_NEAR(CGAL::to_double(cx.y()), nx.y, tol);
-    CHECK_NEAR(CGAL::to_double(cx.z()), nx.z, tol);
+    CHECK_NEAR(CGAL::to_double(cx.x()), nx.x(), tol);
+    CHECK_NEAR(CGAL::to_double(cx.y()), nx.y(), tol);
+    CHECK_NEAR(CGAL::to_double(cx.z()), nx.z(), tol);
 
     // dot product (spelled operator* on vectors in both)
     CHECK_NEAR(CGAL::to_double((b - a) * (c - a)), (nb - na) * (nc - na), tol);
@@ -93,8 +93,8 @@ TEST(native_constructions_match_cgal)
                nat::squared_distance(na, nb), tol);
     const CP cc = CGAL::centroid(a, b, c);
     const nat::Point3 ncc = nat::centroid(na, nb, nc);
-    CHECK_NEAR(CGAL::to_double(cc.x()), ncc.x, tol);
-    CHECK_NEAR(CGAL::to_double(cc.y()), ncc.y, tol);
-    CHECK_NEAR(CGAL::to_double(cc.z()), ncc.z, tol);
+    CHECK_NEAR(CGAL::to_double(cc.x()), ncc.x(), tol);
+    CHECK_NEAR(CGAL::to_double(cc.y()), ncc.y(), tol);
+    CHECK_NEAR(CGAL::to_double(cc.z()), ncc.z(), tol);
   }
 }
