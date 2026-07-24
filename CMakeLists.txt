@@ -5,6 +5,7 @@ list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 option(PCHS_INTERACTIVE "Build the interactive polyscope viewer (requires polyscope + embree)" ON)
 option(PCHS_PYTHON_BINDINGS "Build Python bindings via nanobind" OFF)
+option(PCHS_TESTS "Build the test suite (CTest)" ON)
 
 include(dependencies)
 
@@ -53,6 +54,11 @@ if(PCHS_PYTHON_BINDINGS)
     progressive_convex_hull_simplification
   )
   target_compile_options(pchs_python_module PRIVATE -Wno-format)
+endif()
+
+if(PCHS_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
 endif()
 
 find_program(DSYMUTIL_PROGRAM dsymutil)
