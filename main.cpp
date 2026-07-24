@@ -7,6 +7,9 @@
 #include <igl/matlab_format.h>
 #include <igl/get_seconds.h>
 #include <igl/remove_duplicate_vertices.h>
+#include <igl/polygons_to_triangles.h>
+#include <igl/doublearea.h>
+#include <igl/centroid.h>
 #include <igl/copyleft/cgal/polyhedron_to_mesh.h>
 #include <igl/copyleft/cgal/assign.h>
 
