@@ -70,9 +70,10 @@ template <class Polyhedron>
 void erase_vertex_and_clip_ears(
   Polyhedron & dual,
   typename Polyhedron::Vertex_handle & v,
-  const size_t start_vertex_id,
-  const std::vector<int> & path)
+  const Record & record)
 {
+  const size_t start_vertex_id = record.start_vertex_id;
+  const std::vector<int> & path = record.path;
   auto h0 = dual.erase_center_vertex(v->halfedge());
   while(h0->vertex()->id() != start_vertex_id)
     h0 = h0->next();
@@ -141,12 +142,12 @@ measure_vertex_erasure(
   for(auto f = one_ring_copy.facets_begin(); f != one_ring_copy.facets_end(); ++f)
   {
     auto h = f->halfedge();
-    const auto ori = CGAL::orientation(
+    const auto ori = geom::orientation(
       h->vertex()->point(),
       h->next()->vertex()->point(),
       h->next()->next()->vertex()->point(),
       p);
-    if(ori == CGAL::NEGATIVE)
+    if(ori == geom::NEGATIVE)
       throw std::runtime_error("Removed point lies on negative side of a new face.");
   }
 #endif
@@ -225,5 +226,5 @@ measure_vertex_erasure(
 #include <CGAL/Polyhedron_items_with_id_3.h>
 template std::vector<CGAL::internal::In_place_list_iterator<CGAL::HalfedgeDS_in_place_list_vertex<CGAL::I_Polyhedron_vertex<CGAL::HalfedgeDS_vertex_max_base_with_id<CGAL::HalfedgeDS_list_types<CGAL::Epick, CGAL::I_Polyhedron_derived_items_3<CGAL::Polyhedron_items_with_id_3>, std::allocator<int>>, CGAL::Point_3<CGAL::Epick>, unsigned long>>>, std::allocator<CGAL::HalfedgeDS_in_place_list_vertex<CGAL::I_Polyhedron_vertex<CGAL::HalfedgeDS_vertex_max_base_with_id<CGAL::HalfedgeDS_list_types<CGAL::Epick, CGAL::I_Polyhedron_derived_items_3<CGAL::Polyhedron_items_with_id_3>, std::allocator<int>>, CGAL::Point_3<CGAL::Epick>, unsigned long>>>>>, std::allocator<CGAL::internal::In_place_list_iterator<CGAL::HalfedgeDS_in_place_list_vertex<CGAL::I_Polyhedron_vertex<CGAL::HalfedgeDS_vertex_max_base_with_id<CGAL::HalfedgeDS_list_types<CGAL::Epick, CGAL::I_Polyhedron_derived_items_3<CGAL::Polyhedron_items_with_id_3>, std::allocator<int>>, CGAL::Point_3<CGAL::Epick>, unsigned long>>>, std::allocator<CGAL::HalfedgeDS_in_place_list_vertex<CGAL::I_Polyhedron_vertex<CGAL::HalfedgeDS_vertex_max_base_with_id<CGAL::HalfedgeDS_list_types<CGAL::Epick, CGAL::I_Polyhedron_derived_items_3<CGAL::Polyhedron_items_with_id_3>, std::allocator<int>>, CGAL::Point_3<CGAL::Epick>, unsigned long>>>>>>> collect_neighbors<CGAL::internal::In_place_list_iterator<CGAL::HalfedgeDS_in_place_list_vertex<CGAL::I_Polyhedron_vertex<CGAL::HalfedgeDS_vertex_max_base_with_id<CGAL::HalfedgeDS_list_types<CGAL::Epick, CGAL::I_Polyhedron_derived_items_3<CGAL::Polyhedron_items_with_id_3>, std::allocator<int>>, CGAL::Point_3<CGAL::Epick>, unsigned long>>>, std::allocator<CGAL::HalfedgeDS_in_place_list_vertex<CGAL::I_Polyhedron_vertex<CGAL::HalfedgeDS_vertex_max_base_with_id<CGAL::HalfedgeDS_list_types<CGAL::Epick, CGAL::I_Polyhedron_derived_items_3<CGAL::Polyhedron_items_with_id_3>, std::allocator<int>>, CGAL::Point_3<CGAL::Epick>, unsigned long>>>>>>(CGAL::internal::In_place_list_iterator<CGAL::HalfedgeDS_in_place_list_vertex<CGAL::I_Polyhedron_vertex<CGAL::HalfedgeDS_vertex_max_base_with_id<CGAL::HalfedgeDS_list_types<CGAL::Epick, CGAL::I_Polyhedron_derived_items_3<CGAL::Polyhedron_items_with_id_3>, std::allocator<int>>, CGAL::Point_3<CGAL::Epick>, unsigned long>>>, std::allocator<CGAL::HalfedgeDS_in_place_list_vertex<CGAL::I_Polyhedron_vertex<CGAL::HalfedgeDS_vertex_max_base_with_id<CGAL::HalfedgeDS_list_types<CGAL::Epick, CGAL::I_Polyhedron_derived_items_3<CGAL::Polyhedron_items_with_id_3>, std::allocator<int>>, CGAL::Point_3<CGAL::Epick>, unsigned long>>>>> const&);
 template std::pair<CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>::Traits::FT, Record> measure_vertex_erasure<CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>>(CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>> const&, CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>::Vertex_handle const&, int, CostFunction);
-template void erase_vertex_and_clip_ears<CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>>(CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>&, CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>::Vertex_handle&, unsigned long, std::vector<int, std::allocator<int>> const&);
+template void erase_vertex_and_clip_ears<CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>>(CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>&, CGAL::Polyhedron_3<CGAL::Epick, CGAL::Polyhedron_items_with_id_3, CGAL::HalfedgeDS_default, std::allocator<int>>::Vertex_handle&, Record const&);
 

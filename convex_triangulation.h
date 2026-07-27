@@ -1,9 +1,5 @@
 #pragma once
-#include <CGAL/Polyhedron_incremental_builder_3.h>
-#include <CGAL/Modifier_base.h>
-#include <CGAL/convex_hull_3.h>
-#include <CGAL/boost/graph/Euler_operations.h>
-#include <CGAL/Kernel/global_functions_3.h>
+#include "geometry.h"
 #include <cassert>
 #include <functional>
 #include <map>
@@ -28,12 +24,12 @@ edge_side(typename Polyhedron::Halfedge_const_handle e)
   const Point& c1 = h1->next()->next()->vertex()->point();
   const Point& p2 = h2->next()->vertex()->point();
 
-  const auto ori = CGAL::orientation(a1,b1,c1,p2);
+  const auto ori = geom::orientation(a1,b1,c1,p2);
   switch(ori)
   {
-    case CGAL::POSITIVE: return CGAL::ON_POSITIVE_SIDE;
-    case CGAL::NEGATIVE: return CGAL::ON_NEGATIVE_SIDE;
-    default:             return CGAL::ON_ORIENTED_BOUNDARY;
+    case geom::POSITIVE: return geom::ON_POSITIVE_SIDE;
+    case geom::NEGATIVE: return geom::ON_NEGATIVE_SIDE;
+    default:             return geom::ON_ORIENTED_BOUNDARY;
   }
 }
 
@@ -45,7 +41,7 @@ void confirm_all_edges_are_convex(const Polyhedron& poly)
   {
     if(e > e->opposite()) continue;
     if(e->is_border_edge()) continue;
-    if(edge_side<Polyhedron>(e) == CGAL::ON_POSITIVE_SIDE)
+    if(edge_side<Polyhedron>(e) == geom::ON_POSITIVE_SIDE)
       throw std::runtime_error("Found a non-convex edge.");
   }
 }
@@ -62,13 +58,11 @@ int flip_until_all_interior_edges_are_convex(
   std::vector<typename Polyhedron::Halfedge_handle> stack;
   stack.reserve(poly.size_of_halfedges()/2);
 
-  std::function<void(typename Polyhedron::Halfedge_handle)> mark_and_push_edge;
-  mark_and_push_edge = [&stack,&mark_and_push_edge](auto e)
+  // Push the canonical (smaller-index) half-edge of an interior edge, marked
+  // "unresolved" (id = 0). Not a std::function -> no heap alloc / indirect call.
+  auto mark_and_push_edge = [&stack](auto e)
   {
-    if(e->opposite() < e)
-    {
-      return mark_and_push_edge(e->opposite());
-    }
+    if(e->opposite() < e) e = e->opposite();
     if(e->is_border_edge()) return;
     e->id() = false;
     stack.push_back(e);
@@ -86,9 +80,9 @@ int flip_until_all_interior_edges_are_convex(
     stack.pop_back();
     if(e->id()) { continue; } // marked convex in the meantime
     auto side = edge_side<Polyhedron>(e);
-    if(side == CGAL::ON_POSITIVE_SIDE)
+    if(side == geom::ON_POSITIVE_SIDE)
     {
-      CGAL::Euler::flip_edge(e, poly);
+      mesh::flip_edge(e, poly);
       num_flips++;
       if(num_flips > max_flips)
         throw std::runtime_error("Too many flips, something is wrong.");
@@ -105,6 +99,15 @@ int flip_until_all_interior_edges_are_convex(
 
   return num_flips;
 }
+
+// The remaining one-ring construction helpers use CGAL incremental-builder /
+// make_triangle / convex_hull_3 machinery and are CGAL-backend only. The native
+// backend builds one-rings via nat::Mesh::build + retriangulate_star instead
+// (see native_algo.h), so these are not compiled or instantiated there.
+#if !defined(PCHS_BACKEND_NATIVE)
+#include <CGAL/Polyhedron_incremental_builder_3.h>
+#include <CGAL/Modifier_base.h>
+#include <CGAL/convex_hull_3.h>
 
 // Build a copy of the one-ring around vertex v (center + neighbors as a fan
 // of triangles). Copies vertex ids. Returns by reference so that h0 remains
@@ -287,7 +290,7 @@ void one_ring_triangulation_convex_via_convex_hull(
       const auto & a = hh->vertex()->point();
       const auto & b = hh->next()->vertex()->point();
       const auto & c = hh->next()->next()->vertex()->point();
-      if(CGAL::orientation(a,b,c,p) == CGAL::NEGATIVE)
+      if(geom::orientation(a,b,c,p) == geom::NEGATIVE)
       {
         found_any = true;
         one_ring_copy.erase_facet(hh);
@@ -308,3 +311,5 @@ void one_ring_triangulation_convex_via_convex_hull(
   }
   assert(one_ring_copy.size_of_vertices() == v->degree());
 }
+
+#endif  // !PCHS_BACKEND_NATIVE

@@ -14,7 +14,10 @@ The key idea is to work in the *dual* of the convex hull. Removing a vertex from
 
 ## Build
 
-Requires CMake ≥ 3.16 and a C++17 compiler. Dependencies are fetched automatically via FetchContent.
+Requires CMake ≥ 3.24 (libigl's dependency recipes need it) and a C++17 compiler.
+Dependencies are fetched automatically via FetchContent. Builds on Linux and
+macOS. (On CMake 4.x the project sets a policy floor internally so the commands
+below work as-is; no extra flags needed.)
 
 ```bash
 # Full build (includes interactive viewer; polyscope + embree fetched automatically)
@@ -30,6 +33,44 @@ cmake -B build-py -DCMAKE_BUILD_TYPE=Release -DPCHS_INTERACTIVE=OFF -DPCHS_PYTHO
       -DPython_EXECUTABLE=$(python3 -c "import sys; print(sys.executable)")
 cmake --build build-py --target pchs_python_module
 ```
+
+### Mesh backend (CGAL or native)
+
+The geometry/mesh backend is swappable at configure time via `-DPCHS_BACKEND`:
+
+- `CGAL` (default) — `CGAL::Polyhedron_3` + CGAL predicates + `CGAL::convex_hull_3`.
+- `NATIVE` — a dependency-light backend using only the C++ standard library, a
+  small half-edge mesh, [qhull](http://www.qhull.org) for the convex hull, and
+  [Shewchuk's robust predicates](https://www.cs.cmu.edu/~quake/robust.html) for
+  `orient3d`. The native build fetches no CGAL and links no gmp/mpfr:
+
+  ```bash
+  cmake -B build-native -DCMAKE_BUILD_TYPE=Release -DPCHS_INTERACTIVE=OFF \
+        -DPCHS_TESTS=OFF -DPCHS_BACKEND=NATIVE
+  cmake --build build-native --target pchs
+  ```
+
+Both backends produce the same hulls; they differ only in floating-point tie-breaks
+that can change the greedy removal order late in a run. See
+`docs/backend-abstraction-plan.md` for the design and `tests/native_regression.sh`
+(also wired as an opt-in CTest via `-DPCHS_NATIVE_REGRESSION=ON`) for the A/B check.
+
+### Tests
+
+The test suite (on by default; disable with `-DPCHS_TESTS=OFF`) is wired into CTest:
+
+```bash
+cmake -B build-headless -DCMAKE_BUILD_TYPE=Release -DPCHS_INTERACTIVE=OFF
+cmake --build build-headless --target pchs pchs_tests
+ctest --test-dir build-headless --output-on-failure
+```
+
+It covers global invariants (closed / genus-0 dual, conservative containment),
+byte-exact golden regression on the icosahedron, and per-component units
+(Chebyshev center, dual round-trip, cost vs finite-difference, mean width, the
+half-edge Euler ops, and the native geometry/mesh/hull vs CGAL). Add
+`-DPCHS_NATIVE_REGRESSION=ON` to also A/B-build the native backend and compare it
+against CGAL.
 
 ## Usage
 
@@ -138,6 +179,41 @@ print(s.t_primal_hull, s.t_dual_hull, s.t_queue_init, s.t_last_simplify)
 # Or use the one-shot wrapper:
 pV, pPI, pPC = pchs.simplify_convex_hull(V, F, 18)
 ```
+
+## License
+
+The code in this repository is released under the **MIT License** (see
+[`LICENSE`](LICENSE)). Which license governs a *compiled program*, however,
+depends on the backend you build, because the dependencies differ.
+
+### Native backend (`-DPCHS_BACKEND=NATIVE`) — no copyleft
+
+Links only permissive / weak-copyleft dependencies:
+
+| dependency | license |
+|---|---|
+| [qhull](http://www.qhull.org) | Qhull license (permissive, BSD-style: keep the notice, ship the license text, flag modifications) |
+| [Shewchuk robust predicates](https://www.cs.cmu.edu/~quake/robust.html) | public domain |
+| [SDLP](https://github.com/alecjacobson/SDLP) | permissive ("modify and re-distribute … in any manner as long as this notice is preserved") |
+| [libigl](https://libigl.github.io) (core) and [Eigen](https://eigen.tuxfamily.org) | MPL-2.0 (weak, *file-level* copyleft — obligations apply only to changes to those libraries' own files, not to your code) |
+
+None of these is GPL/LGPL, so a native build carries **no viral copyleft**: you
+may ship it under your own (e.g. MIT) terms while preserving the upstream
+notices. It fetches no CGAL and links no gmp/mpfr/boost.
+
+### CGAL backend (default) — GPL
+
+The default build additionally links **[CGAL](https://www.cgal.org)**. The
+packages it uses, `Convex_hull_3` and `Polyhedron_3`, are **GPL-3.0-or-later**
+(the kernel and `HalfedgeDS` are LGPL-3.0-or-later, and CGAL pulls in Boost).
+Because those two packages are GPL, a **distributed CGAL-backend binary is
+effectively GPL-3.0-or-later** — unless you obtain a commercial CGAL license.
+MIT is GPL-compatible, so combining is fine; it just means the program as a whole
+is copyleft.
+
+**In short:** the library code is MIT. Build the native backend and the only
+obligations are the permissive / weak-copyleft notices above; build with CGAL and
+the distributed binary is GPL.
 
 ## LLM use
 

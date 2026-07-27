@@ -7,8 +7,13 @@
 #include <igl/matlab_format.h>
 #include <igl/get_seconds.h>
 #include <igl/remove_duplicate_vertices.h>
+#include <igl/polygons_to_triangles.h>
+#include <igl/doublearea.h>
+#include <igl/centroid.h>
+#if !defined(PCHS_BACKEND_NATIVE)
 #include <igl/copyleft/cgal/polyhedron_to_mesh.h>
 #include <igl/copyleft/cgal/assign.h>
+#endif
 
 #include "write_polygon_ply.h"
 
@@ -23,9 +28,11 @@
 #include <imgui.h>
 #endif // PCHS_INTERACTIVE
 
+#if !defined(PCHS_BACKEND_NATIVE)
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/Polyhedron_items_with_id_3.h>
+#endif
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -43,6 +50,7 @@
 
 // --- Debug helpers (all call sites are commented out) ---
 
+#if !defined(PCHS_BACKEND_NATIVE)
 template <class Polyhedron>
 void print_in_matlab_format(const Polyhedron & poly, const std::string prefix = "")
 {
@@ -55,6 +63,7 @@ void print_in_matlab_format(const Polyhedron & poly, const std::string prefix = 
   std::cout<<igl::matlab_format_index(PI.transpose().eval(),prefix+"PI")<<std::endl;
   std::cout<<igl::matlab_format(      PC.transpose().eval(),      prefix+"PC")<<std::endl;
 }
+#endif
 
 
 template <class Polyhedron>
