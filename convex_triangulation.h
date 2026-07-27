@@ -1,10 +1,5 @@
 #pragma once
 #include "geometry.h"
-#include <CGAL/Polyhedron_incremental_builder_3.h>
-#include <CGAL/Modifier_base.h>
-#include <CGAL/convex_hull_3.h>
-#include <CGAL/boost/graph/Euler_operations.h>
-#include <CGAL/Kernel/global_functions_3.h>
 #include <cassert>
 #include <functional>
 #include <map>
@@ -106,6 +101,15 @@ int flip_until_all_interior_edges_are_convex(
 
   return num_flips;
 }
+
+// The remaining one-ring construction helpers use CGAL incremental-builder /
+// make_triangle / convex_hull_3 machinery and are CGAL-backend only. The native
+// backend builds one-rings via nat::Mesh::build + retriangulate_star instead
+// (see native_algo.h), so these are not compiled or instantiated there.
+#if !defined(PCHS_BACKEND_NATIVE)
+#include <CGAL/Polyhedron_incremental_builder_3.h>
+#include <CGAL/Modifier_base.h>
+#include <CGAL/convex_hull_3.h>
 
 // Build a copy of the one-ring around vertex v (center + neighbors as a fan
 // of triangles). Copies vertex ids. Returns by reference so that h0 remains
@@ -309,3 +313,5 @@ void one_ring_triangulation_convex_via_convex_hull(
   }
   assert(one_ring_copy.size_of_vertices() == v->degree());
 }
+
+#endif  // !PCHS_BACKEND_NATIVE

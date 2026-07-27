@@ -3,9 +3,11 @@
 #include "polyhedron_utils.h"
 #include "chebyshev_center.h"
 
+#if !defined(PCHS_BACKEND_NATIVE)
 #include <CGAL/Kernel/global_functions_3.h>
 #include <CGAL/Kernel_traits.h>
 #include <CGAL/Cartesian_converter.h>
+#endif
 #include <Eigen/Core>
 #include <vector>
 #include <tuple>

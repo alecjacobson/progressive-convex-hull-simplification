@@ -18,8 +18,12 @@ FetchContent_Populate(SDLP)
 add_library(SDLP INTERFACE)
 target_include_directories(SDLP INTERFACE ${sdlp_SOURCE_DIR}/include)
 
-# Enable CGAL copyleft
-igl_include(copyleft cgal)
+# Enable CGAL copyleft — needed by the CGAL backend and by the test suite
+# (the tests validate the native backend against CGAL). A native-only build with
+# tests off is fully CGAL-free.
+if(NOT PCHS_BACKEND STREQUAL "NATIVE" OR PCHS_TESTS)
+  igl_include(copyleft cgal)
+endif()
 
 if(PCHS_INTERACTIVE)
   igl_include(embree)

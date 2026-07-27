@@ -27,24 +27,25 @@ else()
   list(APPEND PCHS_LIB_SOURCES vertex_erasure.cpp)
 endif()
 
+# The native backend is CGAL-free: link only igl::core + SDLP + qhull.
+if(PCHS_BACKEND STREQUAL "NATIVE")
+  set(PCHS_MESH_LIBS igl::core SDLP pchs_qhull_r)
+else()
+  set(PCHS_MESH_LIBS igl::core igl_copyleft::cgal SDLP)
+endif()
+
 add_library(progressive_convex_hull_simplification STATIC ${PCHS_LIB_SOURCES})
 target_include_directories(progressive_convex_hull_simplification PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(progressive_convex_hull_simplification PUBLIC
-  igl::core
-  igl_copyleft::cgal
-  SDLP
-)
+target_link_libraries(progressive_convex_hull_simplification PUBLIC ${PCHS_MESH_LIBS})
 if(PCHS_BACKEND STREQUAL "NATIVE")
   target_compile_definitions(progressive_convex_hull_simplification PUBLIC PCHS_BACKEND_NATIVE)
-  target_link_libraries(progressive_convex_hull_simplification PUBLIC pchs_qhull_r)
 endif()
 
 add_executable(pchs main.cpp)
 target_link_libraries(pchs PUBLIC
-  igl::core
-  igl_copyleft::cgal
+  ${PCHS_MESH_LIBS}
   progressive_convex_hull_simplification
 )
 

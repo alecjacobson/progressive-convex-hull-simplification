@@ -3,7 +3,9 @@
 
 #include <igl/get_seconds.h>
 #include <igl/remove_duplicate_vertices.h>
+#if !defined(PCHS_BACKEND_NATIVE)
 #include <igl/copyleft/cgal/assign.h>
+#endif
 
 #include <algorithm>
 #include <cassert>
