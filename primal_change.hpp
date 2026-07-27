@@ -107,11 +107,12 @@ std::tuple<typename Polyhedron::Traits::FT, bool> primal_change(
 
   Scalar contribution_bottom = 0;
 
+  std::vector<int> primal_vertices; primal_vertices.reserve(16);  // reused per vertex
   for(typename Polyhedron::Vertex_const_iterator v = poly.vertices_begin(); v != poly.vertices_end(); ++v)
   {
     const auto hv = v->halfedge();
     auto h = hv;
-    std::vector<int> primal_vertices;primal_vertices.reserve(16);
+    primal_vertices.clear();
     // consider each facet incident on the vertex
     do{
       if(h->is_border())

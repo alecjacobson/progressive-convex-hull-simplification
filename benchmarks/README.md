@@ -64,18 +64,40 @@ within run-to-run noise. The `primal hull` phase is byte-identical code
 which validates the measurements. The `geom::`/`mesh::` seam and the headerized
 `primal_change` are zero-cost as intended.
 
-**Native backend.** Competitive and CGAL-free:
+**Native backend.** Competitive and CGAL-free. Hull construction is faster on
+real scans — qhull beats `CGAL::convex_hull_3` (Actaeon 0.030 vs 0.051 s; Pan
+0.055 vs 0.114 s) — so native is *faster overall* on hull-dominated inputs. The
+simplify loop is somewhat slower than CGAL (native index mesh + `retriangulate_star`
++ Shewchuk exact `orient3d` vs CGAL's tuned half-edge and interval-filtered
+predicates), which shows up on the sphere clouds.
 
-- **Hull construction is faster** on real scans — qhull beats `CGAL::convex_hull_3`
-  (Actaeon 0.030 vs 0.051 s; Pan 0.055 vs 0.114 s) — so native is *faster overall*
-  on hull-dominated inputs (Pan total 0.178 vs 0.204 s, 0.87x).
-- **The simplify loop is ~1.3–1.6x slower** than CGAL (native index-based mesh +
-  `retriangulate_star` + Shewchuk exact `orient3d` vs CGAL's tuned half-edge and
-  interval-filtered predicates). This dominates on sphere clouds, where native
-  total lands at 1.24–1.42x.
-- Throughput on the largest case (sphere-200k, ~400k dual-vertex removals):
-  native ≈ 41k removals/s vs CGAL ≈ 53k/s.
+### Native optimizations
 
-Optimization headroom for the native loop (not yet done): the `std::map` edge
-lookups in `nat::Mesh::build`/`retriangulate_star` are the obvious first target
-(replace with hashing or arrays), and slot reuse instead of grow-only allocation.
+A round of data-structure work on the native hot paths (correctness held: CGAL
+golden stayed byte-identical, native still matches CGAL on the regression):
+
+1. `nat::Mesh::build` edge map: `std::map<pair<int,int>>` → int64-keyed
+   `unordered_map` with `reserve` (helps the qhull dual-hull build and every
+   one-ring build).
+2. `boundary_of_star` / `retriangulate_star`: `std::map` → allocation-free linear
+   scans over the small (degree-sized) ring.
+3. flip loop (`flip_until_all_interior_edges_are_convex`): dropped `std::function`
+   (no heap alloc / indirect call) — shared, so the CGAL path benefits too.
+4. `primal_change`: hoisted the per-one-ring-vertex `std::vector` out of the loop
+   (reused buffer) — value-identical, so CGAL golden is unchanged.
+
+Effect (native/CGAL ratio, median of 4 runs):
+
+| model | total before | total after | simplify before | simplify after |
+|---|--:|--:|--:|--:|
+| Actaeon | 1.10x | **0.92x** | 1.75x | 1.40x |
+| Pan | 0.87x | **0.75x** | 1.70x | 1.38x |
+| sphere-50k | 1.42x | **1.16x** | 1.56x | 1.23x |
+| sphere-100k | 1.35x | **1.16x** | 1.48x | 1.22x |
+| sphere-200k | 1.24x | **1.08x** | 1.29x | 1.13x |
+
+So after tuning, native is **faster than CGAL overall on real scans** (0.75–0.92x)
+and within **8–16%** on the pathological sphere clouds; the simplify-loop gap is
+down to 1.13–1.40x. Remaining headroom: reuse per-call scratch buffers (the fresh
+`nat::Mesh` one-ring copy + `primal_change`'s vectors are allocated every
+`measure_vertex_erasure`).

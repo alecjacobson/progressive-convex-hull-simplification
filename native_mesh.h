@@ -24,7 +24,8 @@
 #include <array>
 #include <cassert>
 #include <cstddef>
-#include <map>
+#include <cstdint>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -296,17 +297,20 @@ inline void Mesh::build(const std::vector<Point3> & pts,
   for(const auto & p : pts) new_vertex(p);
 
   // Undirected edge {min,max} -> even half-edge index (dir min->max is e).
-  std::map<std::pair<int, int>, int> edge;
+  // Key packs (min,max) into one 64-bit int for a fast hash.
+  std::unordered_map<std::uint64_t, int> edge;
+  edge.reserve(tris.size() * 2 + 1);
   auto half_for = [&](int u, int w) -> int
   {
-    const std::pair<int, int> key(std::min(u, w), std::max(u, w));
+    const int a = u < w ? u : w, b = u < w ? w : u;
+    const std::uint64_t key = (std::uint64_t(a) << 32) | std::uint32_t(b);
     auto it = edge.find(key);
     int e;
     if(it == edge.end())
     {
       e = new_edge();
-      he_[e].v     = key.second;   // dir key.first -> key.second
-      he_[e ^ 1].v = key.first;
+      he_[e].v     = b;   // dir a -> b
+      he_[e ^ 1].v = a;
       edge.emplace(key, e);
     }
     else e = it->second;
@@ -329,7 +333,7 @@ inline void Mesh::build(const std::vector<Point3> & pts,
   }
 
   // Link border half-edges (facet still -1) into boundary loops.
-  std::map<int, int> out_of;   // source vertex -> border half-edge
+  std::unordered_map<int, int> out_of;   // source vertex -> border half-edge
   for(int b = 0; b < (int)he_.size(); ++b)
     if(!he_[b].dead && he_[b].f < 0)
       out_of[he_[b ^ 1].v] = b;
@@ -354,21 +358,22 @@ inline void boundary_of_star(Mesh & M, Mesh::Vertex_handle v,
   const int start = M.vr_[v.index()].he;   // incoming, target v
   // Star-side boundary half-edges: third edge of each incident triangle.
   std::vector<int> bh;
-  std::map<int, int> src_to_bh;            // source vertex -> boundary half-edge
   int h = start;
   do {
-    const int b = M.he_[M.he_[h].next].next;   // h->next->next
-    bh.push_back(b);
-    src_to_bh[M.he_[b ^ 1].v] = b;             // source(b) -> b
+    bh.push_back(M.he_[M.he_[h].next].next);   // h->next->next
     h = M.he_[h].next ^ 1;                      // rotate around v
   } while(h != start);
-  // Walk the boundary cycle in half-edge direction.
+  // Walk the boundary cycle: the next boundary edge starts at cur's target, i.e.
+  // the (unique) boundary half-edge whose source == target(cur). Degree is small
+  // so a linear scan beats a map (and allocates nothing extra).
+  const int n = (int)bh.size();
   int cur = bh[0];
-  for(std::size_t i = 0; i < bh.size(); ++i)
+  for(int i = 0; i < n; ++i)
   {
     B.push_back(cur);
-    p.push_back(M.he_[cur].v);              // target
-    cur = src_to_bh[M.he_[cur].v];          // next boundary edge starts here
+    const int tgt = M.he_[cur].v;
+    p.push_back(tgt);
+    for(int b : bh) if(M.he_[b ^ 1].v == tgt) { cur = b; break; }
   }
 }
 
@@ -439,16 +444,17 @@ inline void Mesh::retriangulate_star(Vertex_handle v,
   auto gv = [&](int a) { return p[a]; };
 
   // Half-edge for ring edge a->b: boundary edge reuses B, diagonals are new.
-  std::map<std::pair<int, int>, int> diag;
+  // There are at most k-3 diagonals, so a small vector + linear scan beats a map.
+  std::vector<std::array<int, 3>> diag;   // {a, b, half-edge}
+  diag.reserve(2 * (k - 3 > 0 ? k - 3 : 0));
   auto he_for = [&](int a, int b) -> int
   {
     if(b == (a + 1) % k) return B[b];        // boundary p_a -> p_b (== B[b])
-    auto key = std::make_pair(a, b);
-    auto it = diag.find(key);
-    if(it != diag.end()) return it->second;
+    for(const auto & d : diag) if(d[0] == a && d[1] == b) return d[2];
     const int e = new_edge();
     he_[e].v = gv(b); he_[e ^ 1].v = gv(a);
-    diag[{a, b}] = e; diag[{b, a}] = e ^ 1;
+    diag.push_back({a, b, e});
+    diag.push_back({b, a, e ^ 1});
     return e;
   };
 

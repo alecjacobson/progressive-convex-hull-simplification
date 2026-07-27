@@ -58,13 +58,11 @@ int flip_until_all_interior_edges_are_convex(
   std::vector<typename Polyhedron::Halfedge_handle> stack;
   stack.reserve(poly.size_of_halfedges()/2);
 
-  std::function<void(typename Polyhedron::Halfedge_handle)> mark_and_push_edge;
-  mark_and_push_edge = [&stack,&mark_and_push_edge](auto e)
+  // Push the canonical (smaller-index) half-edge of an interior edge, marked
+  // "unresolved" (id = 0). Not a std::function -> no heap alloc / indirect call.
+  auto mark_and_push_edge = [&stack](auto e)
   {
-    if(e->opposite() < e)
-    {
-      return mark_and_push_edge(e->opposite());
-    }
+    if(e->opposite() < e) e = e->opposite();
     if(e->is_border_edge()) return;
     e->id() = false;
     stack.push_back(e);
