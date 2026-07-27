@@ -14,7 +14,10 @@ The key idea is to work in the *dual* of the convex hull. Removing a vertex from
 
 ## Build
 
-Requires CMake ≥ 3.16 and a C++17 compiler. Dependencies are fetched automatically via FetchContent.
+Requires CMake ≥ 3.24 (libigl's dependency recipes need it) and a C++17 compiler.
+Dependencies are fetched automatically via FetchContent. Builds on Linux and
+macOS. (On CMake 4.x the project sets a policy floor internally so the commands
+below work as-is; no extra flags needed.)
 
 ```bash
 # Full build (includes interactive viewer; polyscope + embree fetched automatically)
@@ -51,6 +54,23 @@ Both backends produce the same hulls; they differ only in floating-point tie-bre
 that can change the greedy removal order late in a run. See
 `docs/backend-abstraction-plan.md` for the design and `tests/native_regression.sh`
 (also wired as an opt-in CTest via `-DPCHS_NATIVE_REGRESSION=ON`) for the A/B check.
+
+### Tests
+
+The test suite (on by default; disable with `-DPCHS_TESTS=OFF`) is wired into CTest:
+
+```bash
+cmake -B build-headless -DCMAKE_BUILD_TYPE=Release -DPCHS_INTERACTIVE=OFF
+cmake --build build-headless --target pchs pchs_tests
+ctest --test-dir build-headless --output-on-failure
+```
+
+It covers global invariants (closed / genus-0 dual, conservative containment),
+byte-exact golden regression on the icosahedron, and per-component units
+(Chebyshev center, dual round-trip, cost vs finite-difference, mean width, the
+half-edge Euler ops, and the native geometry/mesh/hull vs CGAL). Add
+`-DPCHS_NATIVE_REGRESSION=ON` to also A/B-build the native backend and compare it
+against CGAL.
 
 ## Usage
 

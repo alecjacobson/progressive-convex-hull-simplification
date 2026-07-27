@@ -1,5 +1,14 @@
-cmake_minimum_required(VERSION 3.16)
+# libigl's dependency recipes require CMake >= 3.24 (e.g. its Boost recipe).
+cmake_minimum_required(VERSION 3.24)
 project(progressive-convex-hull-simplification)
+
+# Some fetched dependencies still declare very old cmake_minimum_required()
+# values that CMake 4.x rejects. Setting the policy floor here lets those
+# subprojects configure without every user having to pass
+# -DCMAKE_POLICY_VERSION_MINIMUM=3.5 on the command line. Harmless on CMake < 4.
+if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+endif()
 
 list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 

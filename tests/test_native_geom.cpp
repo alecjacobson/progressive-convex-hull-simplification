@@ -31,7 +31,7 @@ std::vector<std::array<double, 3>> sample_points()
 }
 }  // namespace
 
-TEST(native_orient3d_matches_cgal)
+TEST(native_geom_orient3d_matches_cgal)
 {
   const auto pts = sample_points();
   // Fixed quadruples chosen by a deterministic stride so we cover positive,
@@ -62,7 +62,7 @@ TEST(native_orient3d_matches_cgal)
   CHECK(pos > 0 && neg > 0);
 }
 
-TEST(native_constructions_match_cgal)
+TEST(native_geom_constructions_match_cgal)
 {
   const auto pts = sample_points();
   const int n = int(pts.size());

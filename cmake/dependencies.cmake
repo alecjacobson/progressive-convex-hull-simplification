@@ -69,6 +69,10 @@ if(PCHS_QHULL)
       ${predicates_SOURCE_DIR}/src/constants.c)
   target_include_directories(pchs_predicates PUBLIC ${predicates_SOURCE_DIR}/include)
   set_target_properties(pchs_predicates PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  # Shewchuk's exactness relies on error-free transformations; FMA contraction
+  # (default on many compilers, esp. arm64/Apple Silicon) would break them.
+  target_compile_options(pchs_predicates PRIVATE
+    $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-ffp-contract=off>)
 endif()
 
 if(PCHS_PYTHON_BINDINGS)
