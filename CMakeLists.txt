@@ -6,6 +6,7 @@ list(PREPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 option(PCHS_INTERACTIVE "Build the interactive polyscope viewer (requires polyscope + embree)" ON)
 option(PCHS_PYTHON_BINDINGS "Build Python bindings via nanobind" OFF)
 option(PCHS_TESTS "Build the test suite (CTest)" ON)
+option(PCHS_NATIVE_REGRESSION "Add a CTest that builds the native backend and A/B-compares vs CGAL (nested build; needs network)" OFF)
 set(PCHS_BACKEND "CGAL" CACHE STRING "Mesh backend: CGAL or NATIVE")
 # The native backend needs qhull; force it on when selected.
 if(PCHS_BACKEND STREQUAL "NATIVE")

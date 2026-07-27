@@ -31,6 +31,27 @@ cmake -B build-py -DCMAKE_BUILD_TYPE=Release -DPCHS_INTERACTIVE=OFF -DPCHS_PYTHO
 cmake --build build-py --target pchs_python_module
 ```
 
+### Mesh backend (CGAL or native)
+
+The geometry/mesh backend is swappable at configure time via `-DPCHS_BACKEND`:
+
+- `CGAL` (default) — `CGAL::Polyhedron_3` + CGAL predicates + `CGAL::convex_hull_3`.
+- `NATIVE` — a dependency-light backend using only the C++ standard library, a
+  small half-edge mesh, [qhull](http://www.qhull.org) for the convex hull, and
+  [Shewchuk's robust predicates](https://www.cs.cmu.edu/~quake/robust.html) for
+  `orient3d`. The native build fetches no CGAL and links no gmp/mpfr:
+
+  ```bash
+  cmake -B build-native -DCMAKE_BUILD_TYPE=Release -DPCHS_INTERACTIVE=OFF \
+        -DPCHS_TESTS=OFF -DPCHS_BACKEND=NATIVE
+  cmake --build build-native --target pchs
+  ```
+
+Both backends produce the same hulls; they differ only in floating-point tie-breaks
+that can change the greedy removal order late in a run. See
+`docs/backend-abstraction-plan.md` for the design and `tests/native_regression.sh`
+(also wired as an opt-in CTest via `-DPCHS_NATIVE_REGRESSION=ON`) for the A/B check.
+
 ## Usage
 
 ```

@@ -176,8 +176,7 @@ green against Backend A, then reused verbatim to validate Backend B.
     CGAL (vertex count, volume, containment) on cube/icosahedron/random cloud
     (`tests/test_native_hull.cpp`). Built behind `PCHS_QHULL` (default ON),
     fetching only `src/libqhull_r/` so qhull's apps/tests stay out.
-  - **Remaining: Shewchuk `orient3d` (robustness hardening, optional for clean
-    inputs); `bounding_box` (trivial).**
+  - ✅ `bounding_box` (native, trivial); Shewchuk `orient3d` — see Polish below.
 - **Phase C — Integration & validation** ✅ *functional*: `-DPCHS_BACKEND=NATIVE`
   compiles and runs the whole algorithm on `nat::Mesh` (native branches in
   `geometry.h`/`mesh_backend.h`/`dual_hull.h`/`convex_hull_simplification.cpp`;
@@ -187,9 +186,13 @@ green against Backend A, then reused verbatim to validate Backend B.
   targets 12/11/10) and on `Actaeon --target 200` (area 5.269, volume 0.7059,
   mw 1.484 on both). Later targets diverge only by expected greedy-order drift
   (qhull vs CGAL produce slightly different dual points).
-  **Remaining polish:** a CI-wired native regression build; Shewchuk `orient3d`;
-  drop the residual CGAL link from the native build (assign includes + main.cpp
-  debug helpers) so Backend B is std+qhull+shewchuk only.
+- **Polish** ✅ *done*: native build is fully CGAL-free (fetches no CGAL, links
+  no gmp/mpfr/cgal/boost); `nat::orient3d` uses Shewchuk's adaptive exact
+  predicate (danshapero/predicates, sign-flipped to CGAL's convention, validated
+  by `native_orient3d_matches_cgal`); `tests/native_regression.sh` A/B-compares
+  the two backends (opt-in CTest `native.regression` via
+  `-DPCHS_NATIVE_REGRESSION=ON`).
+
   Note on the retriangulation splice: rather than reproduce CGAL's
   `erase_center_vertex` + `split_facet`-replay path on `nat::Mesh`, the native
   backend uses `retriangulate_star(v, tris)` directly — the candidate one-ring

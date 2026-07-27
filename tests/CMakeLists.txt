@@ -36,6 +36,18 @@ if(PCHS_QHULL)
   add_test(NAME unit.native_hull COMMAND pchs_tests native_hull)
 endif()
 
+# Native-backend regression: build a CGAL-free native pchs and A/B-compare its
+# --stats output against the CGAL pchs. Opt-in (nested build + network fetch).
+if(PCHS_NATIVE_REGRESSION)
+  add_test(NAME native.regression
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/native_regression.sh
+            $<TARGET_FILE:pchs>
+            ${CMAKE_CURRENT_SOURCE_DIR}/..
+            ${CMAKE_CURRENT_BINARY_DIR}/native-regression
+            ${CMAKE_COMMAND}
+  )
+endif()
+
 # Golden regression on the icosahedron (byte-exact for the CGAL backend).
 add_test(NAME golden.icosahedron
   COMMAND ${CMAKE_COMMAND} -E env bash
