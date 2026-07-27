@@ -241,3 +241,5 @@ would be an easy fully automatic task for Claude Code. It burnt an entire
 session quota and output nothing. So, I ended up writing that manually (with
 copilot tab-complete), and then Claude code cleaned up the flags and
 visualization code to expose the new cost metric.
+
+**Update:** Since then, I've had Claude implement a non-CGAL (i.e., non-GPL) backend. I did this in `--dangerously-skip-permissions` mode which was fairly successful at not nagging me for instruction. I told it to use Qhull and to build its own half-edge data-structure using STL. It appears to have done that effectively.
