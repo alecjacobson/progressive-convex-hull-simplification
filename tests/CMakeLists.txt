@@ -23,7 +23,7 @@ if(PCHS_QHULL)
     ${CMAKE_CURRENT_SOURCE_DIR}/../native_hull.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/test_native_hull.cpp
   )
-  target_link_libraries(pchs_tests PRIVATE pchs_qhull_r)
+  target_link_libraries(pchs_tests PRIVATE pchs_qhull_r pchs_predicates_wrap)
   target_compile_definitions(pchs_tests PRIVATE PCHS_QHULL)
 endif()
 

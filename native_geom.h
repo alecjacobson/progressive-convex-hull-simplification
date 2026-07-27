@@ -153,20 +153,35 @@ inline double squared_distance(const Point3 & a, const Point3 & b)
 inline double to_double(double x) { return x; }
 inline double sqrt(double x) { return std::sqrt(x); }
 
+#if defined(PCHS_ROBUST_PREDICATES)
+namespace detail
+{
+// Defined in native_predicates.cpp (Shewchuk adaptive exact predicate).
+Sign robust_orient3d(const Point3 & a, const Point3 & b,
+                     const Point3 & c, const Point3 & d);
+}
+#endif
+
 // orient3d: sign of the signed volume of (a,b,c,d), matching CGAL::orientation:
 //   CGAL::orientation(a,b,c,d) == sign of det[(b-a),(c-a),(d-a)]
 //                              == (d-a) . ((b-a) x (c-a)).
 // > 0 (POSITIVE) when d is on the positive side of the oriented plane (a,b,c).
 //
-// TODO(Phase B): replace with Shewchuk's adaptive robust orient3d.
+// With PCHS_ROBUST_PREDICATES this dispatches to Shewchuk's adaptive exact
+// orient3d; otherwise it uses a plain double determinant (exact only for
+// integer/dyadic inputs).
 inline Sign orient3d(const Point3 & a, const Point3 & b, const Point3 & c,
                      const Point3 & d)
 {
+#if defined(PCHS_ROBUST_PREDICATES)
+  return detail::robust_orient3d(a, b, c, d);
+#else
   const Vector3 ba = b - a;
   const Vector3 ca = c - a;
   const Vector3 da = d - a;
   const double det = da * cross_product(ba, ca);
   return det > 0 ? POSITIVE : (det < 0 ? NEGATIVE : ZERO);
+#endif
 }
 
 // Named `orientation` to match the CGAL spelling used at call sites.

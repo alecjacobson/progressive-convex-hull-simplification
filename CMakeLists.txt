@@ -15,6 +15,15 @@ option(PCHS_QHULL "Fetch qhull and build the native backend's convex hull" ON)
 
 include(dependencies)
 
+# Wrapper exposing Shewchuk robust orient3d to native_geom.h. Anything that links
+# it gets PCHS_ROBUST_PREDICATES, so nat::orient3d uses the exact predicate.
+if(PCHS_QHULL)
+  add_library(pchs_predicates_wrap STATIC native_predicates.cpp)
+  target_include_directories(pchs_predicates_wrap PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(pchs_predicates_wrap PUBLIC pchs_predicates)
+  target_compile_definitions(pchs_predicates_wrap PUBLIC PCHS_ROBUST_PREDICATES)
+endif()
+
 #
 set(PCHS_LIB_SOURCES
   chebyshev_center.cpp
@@ -41,6 +50,9 @@ target_include_directories(progressive_convex_hull_simplification PUBLIC
 target_link_libraries(progressive_convex_hull_simplification PUBLIC ${PCHS_MESH_LIBS})
 if(PCHS_BACKEND STREQUAL "NATIVE")
   target_compile_definitions(progressive_convex_hull_simplification PUBLIC PCHS_BACKEND_NATIVE)
+  if(TARGET pchs_predicates_wrap)
+    target_link_libraries(progressive_convex_hull_simplification PUBLIC pchs_predicates_wrap)
+  endif()
 endif()
 
 add_executable(pchs main.cpp)

@@ -52,6 +52,23 @@ if(PCHS_QHULL)
   add_library(pchs_qhull_r STATIC ${PCHS_QHULL_R_SRC})
   target_include_directories(pchs_qhull_r PUBLIC ${qhull_SOURCE_DIR}/src)
   set_target_properties(pchs_qhull_r PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+  # Shewchuk robust predicates (adaptive orient3d) for the native backend.
+  # Precomputed constants (constants.c) -> no runtime exactinit needed. We build
+  # just the two source files (SOURCE_SUBDIR points at a header-only dir so
+  # MakeAvailable skips the project's own CMakeLists/tests).
+  FetchContent_Declare(
+      predicates
+      GIT_REPOSITORY https://github.com/danshapero/predicates.git
+      GIT_TAG        master
+      SOURCE_SUBDIR  include
+  )
+  FetchContent_MakeAvailable(predicates)
+  add_library(pchs_predicates STATIC
+      ${predicates_SOURCE_DIR}/src/predicates.c
+      ${predicates_SOURCE_DIR}/src/constants.c)
+  target_include_directories(pchs_predicates PUBLIC ${predicates_SOURCE_DIR}/include)
+  set_target_properties(pchs_predicates PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
 
 if(PCHS_PYTHON_BINDINGS)
