@@ -180,6 +180,41 @@ print(s.t_primal_hull, s.t_dual_hull, s.t_queue_init, s.t_last_simplify)
 pV, pPI, pPC = pchs.simplify_convex_hull(V, F, 18)
 ```
 
+## License
+
+The code in this repository is released under the **MIT License** (see
+[`LICENSE`](LICENSE)). Which license governs a *compiled program*, however,
+depends on the backend you build, because the dependencies differ.
+
+### Native backend (`-DPCHS_BACKEND=NATIVE`) — no copyleft
+
+Links only permissive / weak-copyleft dependencies:
+
+| dependency | license |
+|---|---|
+| [qhull](http://www.qhull.org) | Qhull license (permissive, BSD-style: keep the notice, ship the license text, flag modifications) |
+| [Shewchuk robust predicates](https://www.cs.cmu.edu/~quake/robust.html) | public domain |
+| [SDLP](https://github.com/alecjacobson/SDLP) | permissive ("modify and re-distribute … in any manner as long as this notice is preserved") |
+| [libigl](https://libigl.github.io) (core) and [Eigen](https://eigen.tuxfamily.org) | MPL-2.0 (weak, *file-level* copyleft — obligations apply only to changes to those libraries' own files, not to your code) |
+
+None of these is GPL/LGPL, so a native build carries **no viral copyleft**: you
+may ship it under your own (e.g. MIT) terms while preserving the upstream
+notices. It fetches no CGAL and links no gmp/mpfr/boost.
+
+### CGAL backend (default) — GPL
+
+The default build additionally links **[CGAL](https://www.cgal.org)**. The
+packages it uses, `Convex_hull_3` and `Polyhedron_3`, are **GPL-3.0-or-later**
+(the kernel and `HalfedgeDS` are LGPL-3.0-or-later, and CGAL pulls in Boost).
+Because those two packages are GPL, a **distributed CGAL-backend binary is
+effectively GPL-3.0-or-later** — unless you obtain a commercial CGAL license.
+MIT is GPL-compatible, so combining is fine; it just means the program as a whole
+is copyleft.
+
+**In short:** the library code is MIT. Build the native backend and the only
+obligations are the permissive / weak-copyleft notices above; build with CGAL and
+the distributed binary is GPL.
+
 ## LLM use
 
 I wrote the original prototype of this algorithm in matlab without much input
