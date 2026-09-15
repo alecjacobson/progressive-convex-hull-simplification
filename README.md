@@ -153,7 +153,26 @@ ConvexHullSimplification chs(V, F, /*max_degree_for_flips=*/100, CostFunction::P
 
 ## Python API
 
-After building with `-DPCHS_PYTHON_BINDINGS=ON`, add the build directory to `PYTHONPATH` and import `pchs`:
+### Install
+
+```bash
+pip install git+https://github.com/alecjacobson/progressive-convex-hull-simplification.git
+```
+
+This builds the `pchs` extension module via CMake/nanobind under the hood (using
+[scikit-build-core](https://scikit-build-core.readthedocs.io)); the default build
+links CGAL, so the compile can take a few minutes and the resulting module is
+GPL-encumbered (see [License](#license)). To build the dependency-light native
+backend instead (no CGAL/GPL), pass it through `CMAKE_ARGS`:
+
+```bash
+CMAKE_ARGS="-DPCHS_BACKEND=NATIVE" \
+  pip install git+https://github.com/alecjacobson/progressive-convex-hull-simplification.git
+```
+
+Alternatively, building manually (see [Build](#build) above) with
+`-DPCHS_PYTHON_BINDINGS=ON`, adding the build directory to `PYTHONPATH` also
+works:
 
 ```python
 import pchs

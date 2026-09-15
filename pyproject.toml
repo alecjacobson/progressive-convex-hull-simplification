@@ -1,0 +1,21 @@
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "pchs"
+version = "0.1.0"
+description = "Progressive Convex Hull Simplification"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+
+[tool.scikit-build]
+cmake.version = ">=3.24"
+cmake.args = [
+  "-DPCHS_INTERACTIVE=OFF",
+  "-DPCHS_TESTS=OFF",
+  "-DPCHS_PYTHON_BINDINGS=ON",
+]
+wheel.packages = []
+install.components = ["pchs_python"]

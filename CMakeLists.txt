@@ -57,6 +57,8 @@ add_library(progressive_convex_hull_simplification STATIC ${PCHS_LIB_SOURCES})
 target_include_directories(progressive_convex_hull_simplification PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
+# Needed to link this static lib into the nanobind shared module (PCHS_PYTHON_BINDINGS).
+set_target_properties(progressive_convex_hull_simplification PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(progressive_convex_hull_simplification PUBLIC ${PCHS_MESH_LIBS})
 if(PCHS_BACKEND STREQUAL "NATIVE")
   target_compile_definitions(progressive_convex_hull_simplification PUBLIC PCHS_BACKEND_NATIVE)
@@ -93,6 +95,7 @@ if(PCHS_PYTHON_BINDINGS)
     progressive_convex_hull_simplification
   )
   target_compile_options(pchs_python_module PRIVATE -Wno-format)
+  install(TARGETS pchs_python_module LIBRARY DESTINATION . COMPONENT pchs_python)
 endif()
 
 if(PCHS_TESTS)
