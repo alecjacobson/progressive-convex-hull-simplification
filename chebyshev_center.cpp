@@ -6,6 +6,7 @@
 #include <igl/linprog.h>
 #include <sdlp/sdlp.hpp>
 #include <iostream>
+#include <stdexcept>
 
 template <
  typename DerivedP,
@@ -64,3 +65,20 @@ bool igl::chebyshev_center(
 
 template bool igl::chebyshev_center<Eigen::Matrix<double, -1, 4, 1, -1, 4>, Eigen::Matrix<double, 1, 3, 1, 1, 3>>(Eigen::MatrixBase<Eigen::Matrix<double, -1, 4, 1, -1, 4>> const&, Eigen::PlainObjectBase<Eigen::Matrix<double, 1, 3, 1, 1, 3>>&);
 template bool igl::chebyshev_center<Eigen::Matrix<double, -1, 4, 1, -1, 4>, Eigen::Matrix<double, 3, 1, 0, 3, 1>>(Eigen::MatrixBase<Eigen::Matrix<double, -1, 4, 1, -1, 4>> const&, Eigen::PlainObjectBase<Eigen::Matrix<double, 3, 1, 0, 3, 1>>&);
+
+Eigen::Vector3d chebyshev_center(const Eigen::MatrixXd & halfspaces)
+{
+  if(halfspaces.cols() != 4)
+  {
+    throw std::runtime_error(
+      "chebyshev_center: halfspaces must be an N x 4 matrix [nx,ny,nz,b]");
+  }
+  const Eigen::Matrix<double,Eigen::Dynamic,4,Eigen::RowMajor> P = halfspaces;
+  Eigen::Vector3d x0;
+  if(!igl::chebyshev_center(P, x0))
+  {
+    throw std::runtime_error(
+      "chebyshev_center: halfspaces have no interior point (infeasible)");
+  }
+  return x0;
+}

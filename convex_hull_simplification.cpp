@@ -11,6 +11,7 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 
 // ---------------------------------------------------------------------------
 // Constructor: build primal hull → dual hull → initialize queue
@@ -471,4 +472,50 @@ simplify_convex_hull(
   ConvexHullSimplification chs(V, F, max_degree_for_flips, cost_function);
   chs.simplify_to(target_num_dual_vertices);
   return chs.get_primal_mesh();
+}
+
+std::tuple<Eigen::MatrixXd, Eigen::VectorXi, Eigen::VectorXi>
+primal_mesh_from_halfspaces(
+  const Eigen::MatrixXd & halfspaces,
+  const std::optional<Eigen::Vector3d> & x0_opt)
+{
+  if(halfspaces.cols() != 4)
+  {
+    throw std::runtime_error(
+      "primal_mesh_from_halfspaces: halfspaces must be an N x 4 matrix [nx,ny,nz,b]");
+  }
+  const Eigen::Vector3d x0 = x0_opt ? *x0_opt : chebyshev_center(halfspaces);
+
+  // Duality map: given halfspace [n, b], d = -n / (n·x0 + b).
+  const int m = halfspaces.rows();
+  Eigen::Matrix<double,Eigen::Dynamic,3,Eigen::RowMajor> dV(m, 3);
+  for(int i = 0; i < m; i++)
+  {
+    const Eigen::Vector3d n = halfspaces.row(i).head<3>().transpose();
+    const double denom = n.dot(x0) + halfspaces(i, 3);
+    const Eigen::Vector3d d = -n / denom;
+    dV.row(i) = d.transpose();
+  }
+
+  // Dedup coincident dual points (degenerate/duplicate input halfspaces),
+  // matching ConvexHullSimplification's own construction pipeline.
+  {
+    Eigen::VectorXi _1, _2;
+    igl::remove_duplicate_vertices(
+      Eigen::Matrix<double,Eigen::Dynamic,3,Eigen::RowMajor>(dV), 1e-14, dV, _1, _2);
+  }
+
+  mesh::Polyhedron dual;
+  {
+    auto dpts = point_list<mesh::Kernel>(dV);
+    mesh::convex_hull_3(dpts.begin(), dpts.end(), dual);
+  }
+
+  int fid = 0;
+  for(auto f = dual.facets_begin(); f != dual.facets_end(); ++f) { f->id() = fid++; }
+
+  const mesh::Point3 x0_pt(x0(0), x0(1), x0(2));
+  auto [pV_dual, pPI, pPC] = dual_to_primal_mesh(dual, x0_pt);
+  const Eigen::MatrixXd pV = pV_dual;
+  return {pV, pPI, pPC};
 }

@@ -1,7 +1,9 @@
 #include "convex_hull_simplification.h"
+#include "chebyshev_center.h"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/eigen/dense.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/tuple.h>
 
@@ -91,4 +93,22 @@ NB_MODULE(pchs, m)
     "max_degree_for_flips"_a = 100,
     "cost_function"_a = CostFunction::PRIMAL_VOLUME,
     "Construct, simplify to target dual vertices, and return (pV, pPI, pPC).");
+
+  // --- Halfspace-based construction ---
+  m.def("chebyshev_center",
+    &chebyshev_center,
+    "halfspaces"_a,
+    "Chebyshev center of a set of halfspaces [nx,ny,nz,b] (interior: n.x + b <= 0):\n"
+    "the center of the largest inscribed ball. Raises if the LP fails outright;\n"
+    "note it does not always detect a genuinely empty intersection (e.g. two\n"
+    "disjoint opposing planes) — the caller should sanity-check the result if\n"
+    "the input isn't already known to bound a nonempty region.");
+
+  m.def("primal_mesh_from_halfspaces",
+    &primal_mesh_from_halfspaces,
+    "halfspaces"_a, "x0"_a = nb::none(),
+    "Construct the primal convex polytope (pV, pPI, pPC) directly from a set of\n"
+    "halfspaces [nx,ny,nz,b] (interior: n.x + b <= 0), skipping the usual\n"
+    "mesh -> primal-hull -> dual pipeline (no simplification). If x0 is\n"
+    "omitted, it is computed as the halfspaces' Chebyshev center.");
 }

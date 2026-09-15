@@ -5,6 +5,7 @@
 #include <igl/min_heap.h>
 
 #include <Eigen/Core>
+#include <optional>
 #include <tuple>
 #include <vector>
 
@@ -110,3 +111,14 @@ simplify_convex_hull(
   int target_num_dual_vertices,
   int max_degree_for_flips = 100,
   CostFunction cost_function = CostFunction::PRIMAL_VOLUME);
+
+// Construct the primal convex polytope (pV, pPI, pPC) directly from a set of
+// halfspaces [nx,ny,nz,b] (interior: n·x + b <= 0) — the "halfspaces to mesh"
+// half of the primal/dual pipeline used internally by
+// ConvexHullSimplification, exposed standalone (no simplification). If x0 is
+// omitted, it is computed as the halfspaces' Chebyshev center (see
+// chebyshev_center()).
+std::tuple<Eigen::MatrixXd, Eigen::VectorXi, Eigen::VectorXi>
+primal_mesh_from_halfspaces(
+  const Eigen::MatrixXd & halfspaces,
+  const std::optional<Eigen::Vector3d> & x0 = std::nullopt);

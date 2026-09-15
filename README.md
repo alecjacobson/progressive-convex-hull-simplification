@@ -199,6 +199,22 @@ print(s.t_primal_hull, s.t_dual_hull, s.t_queue_init, s.t_last_simplify)
 pV, pPI, pPC = pchs.simplify_convex_hull(V, F, 18)
 ```
 
+Construct a convex polytope directly from a set of halfspaces (skipping the
+mesh → primal-hull → dual pipeline entirely, and with no simplification):
+
+```python
+# Halfspaces as rows [nx, ny, nz, b], interior: n·x + b <= 0.
+halfspaces = ...  # N x 4
+
+x0 = pchs.chebyshev_center(halfspaces)  # optional; computed automatically if omitted
+pV, pPI, pPC = pchs.primal_mesh_from_halfspaces(halfspaces, x0)
+```
+
+`chebyshev_center` raises if the underlying LP fails outright, but — like the
+`igl::chebyshev_center` it wraps — doesn't always detect a genuinely empty
+intersection (e.g. two disjoint opposing planes); sanity-check the result if
+the input isn't already known to bound a nonempty region.
+
 ## License
 
 The code in this repository is released under the **MIT License** (see
