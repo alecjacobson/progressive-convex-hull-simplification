@@ -29,6 +29,8 @@ include(dependencies)
 # it gets PCHS_ROBUST_PREDICATES, so nat::orient3d uses the exact predicate.
 if(PCHS_QHULL)
   add_library(pchs_predicates_wrap STATIC native_predicates.cpp)
+  set_target_properties(pchs_predicates_wrap PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  target_compile_features(pchs_predicates_wrap PUBLIC cxx_std_17)
   target_include_directories(pchs_predicates_wrap PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
   target_link_libraries(pchs_predicates_wrap PUBLIC pchs_predicates)
   target_compile_definitions(pchs_predicates_wrap PUBLIC PCHS_ROBUST_PREDICATES)
@@ -94,8 +96,12 @@ if(PCHS_PYTHON_BINDINGS)
   target_link_libraries(pchs_python_module PRIVATE
     progressive_convex_hull_simplification
   )
-  target_compile_options(pchs_python_module PRIVATE -Wno-format)
+  target_compile_options(pchs_python_module PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-format>)
   install(TARGETS pchs_python_module LIBRARY DESTINATION . COMPONENT pchs_python)
+  if(SKBUILD AND PCHS_BACKEND STREQUAL "NATIVE")
+    include(wheel_licenses)
+  endif()
 endif()
 
 if(PCHS_TESTS)

@@ -40,3 +40,10 @@ imgui.ini
 .polyscope.ini
 build-headless/*
 build-native/*
+
+# Python packaging and tests
+dist/
+wheelhouse/
+.venv/
+__pycache__/
+.pytest_cache/

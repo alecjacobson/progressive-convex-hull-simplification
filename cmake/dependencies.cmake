@@ -69,10 +69,16 @@ if(PCHS_QHULL)
       ${predicates_SOURCE_DIR}/src/constants.c)
   target_include_directories(pchs_predicates PUBLIC ${predicates_SOURCE_DIR}/include)
   set_target_properties(pchs_predicates PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  # Upstream's header assumes a DLL on MSVC and has no static-library switch.
+  # Use its export declarations for both the library and consumers so they
+  # refer to the linked definitions rather than nonexistent DLL imports.
+  target_compile_definitions(pchs_predicates PUBLIC
+    $<$<C_COMPILER_ID:MSVC>:predicates_EXPORTS>)
   # Shewchuk's exactness relies on error-free transformations; FMA contraction
   # (default on many compilers, esp. arm64/Apple Silicon) would break them.
   target_compile_options(pchs_predicates PRIVATE
-    $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-ffp-contract=off>)
+    $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-ffp-contract=off>
+    $<$<C_COMPILER_ID:MSVC>:/fp:strict>)
 endif()
 
 if(PCHS_PYTHON_BINDINGS)

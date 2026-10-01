@@ -9,6 +9,7 @@ description = "Progressive Convex Hull Simplification"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.8"
+dependencies = ["numpy>=1.21"]
 
 [tool.scikit-build]
 cmake.version = ">=3.24"
@@ -18,4 +19,20 @@ cmake.args = [
   "-DPCHS_PYTHON_BINDINGS=ON",
 ]
 wheel.packages = []
+wheel.py-api = "cp312"
+build.targets = ["pchs_python_module"]
 install.components = ["pchs_python"]
+
+[tool.cibuildwheel]
+# Keep the supported Python 3.8 floor; cibuildwheel 4 drops it.
+build = "cp{38,39,310,311,312,313,314}-*"
+skip = "*-musllinux_*"
+test-requires = ["pytest"]
+test-command = "python -m pytest {project}/tests/test_python.py"
+
+[tool.cibuildwheel.config-settings]
+"cmake.define.PCHS_BACKEND" = "NATIVE"
+
+[tool.cibuildwheel.linux]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
