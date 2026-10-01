@@ -77,8 +77,12 @@ if(PCHS_QHULL)
   # Shewchuk's exactness relies on error-free transformations; FMA contraction
   # (default on many compilers, esp. arm64/Apple Silicon) would break them.
   target_compile_options(pchs_predicates PRIVATE
-    $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-ffp-contract=off>
-    $<$<C_COMPILER_ID:MSVC>:/fp:strict>)
+    $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-ffp-contract=off>)
+  # MSVC /fp:strict prevents constant folding in C static initializers (C2099).
+  # Apply it only to the predicate calculations; constants.c needs the default
+  # /fp:precise mode to evaluate its precomputed error bounds at compile time.
+  set_source_files_properties(${predicates_SOURCE_DIR}/src/predicates.c PROPERTIES
+    COMPILE_OPTIONS "$<$<C_COMPILER_ID:MSVC>:/fp:strict>")
 endif()
 
 if(PCHS_PYTHON_BINDINGS)

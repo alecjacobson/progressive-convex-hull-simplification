@@ -36,3 +36,8 @@ test-command = "python -m pytest {project}/tests/test_python.py"
 [tool.cibuildwheel.linux]
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
+
+[tool.cibuildwheel.macos.environment]
+# nanobind's C++17 aligned allocation requires macOS 10.13 on Intel.
+# cibuildwheel raises this to 11.0 automatically for Apple Silicon.
+MACOSX_DEPLOYMENT_TARGET = "10.13"
