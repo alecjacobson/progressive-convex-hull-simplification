@@ -156,6 +156,12 @@ ConvexHullSimplification chs(V, F, /*max_degree_for_flips=*/100, CostFunction::P
 ### Install
 
 ```bash
+pip install pchs
+```
+
+Prebuilt wheels use the native backend. To build from the repository instead:
+
+```bash
 pip install git+https://github.com/alecjacobson/progressive-convex-hull-simplification.git
 ```
 
