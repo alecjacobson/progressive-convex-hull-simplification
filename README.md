@@ -6,6 +6,12 @@ Implementation of the algorithm from the paper
 
 https://arxiv.org/abs/2604.14468
 
+```bash
+pip install pchs
+```
+
+Prebuilt Python wheels use the native backend.
+
 ## What it does
 
 Given a 3D mesh, produces a sequence of progressively simpler convex hulls that are guaranteed to strictly contain the input at every step (conservative / exterior simplification).
@@ -153,13 +159,7 @@ ConvexHullSimplification chs(V, F, /*max_degree_for_flips=*/100, CostFunction::P
 
 ## Python API
 
-### Install
-
-```bash
-pip install pchs
-```
-
-Prebuilt wheels use the native backend. To build from the repository instead:
+### Install from source
 
 ```bash
 pip install git+https://github.com/alecjacobson/progressive-convex-hull-simplification.git
